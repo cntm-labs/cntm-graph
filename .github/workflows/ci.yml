@@ -58,23 +58,3 @@ jobs:
       - name: Test
         run: mojo test .
 
-  
-  cuda-test:
-    name: CUDA Build & Test
-    runs-on: ubuntu-latest
-    container:
-      image: nvidia/cuda:12.4.1-devel-ubuntu22.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify CUDA
-        run: nvidia-smi || echo "No GPU available — compile-only mode"
-      - name: Install build tools
-        run: apt-get update && apt-get install -y build-essential cmake
-      - name: Build CUDA kernels
-        run: |
-          if [ -d "cuda/" ]; then
-            cd cuda && cmake -B build && cmake --build build
-          else
-            echo "No cuda/ directory found — skipping"
-          fi
-

@@ -1,0 +1,15 @@
+name: "CI for <project_name />"
+on: [push, pull_request]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup <tech_stack />
+        run: echo "Setting up environment for <tech_stack />..."
+      
+      - name: Install & Test
+        run: |
+          <install_command [text] />
+          <test_command [text] />

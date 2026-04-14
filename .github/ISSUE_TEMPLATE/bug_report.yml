@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug in <project_name />
+description: Report a bug in cntm-graph
 labels: ["bug"]
 body:
   - type: markdown
@@ -34,4 +34,4 @@ body:
     id: version
     attributes:
       label: Version / Environment
-      placeholder: "e.g., v1.0.0, <os_platform [MacOS|Linux|Windows] />"
+      placeholder: "e.g., v1.0.0, MacOS/Linux/Windows"

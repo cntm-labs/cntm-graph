@@ -1,8 +1,8 @@
 ### 📝 Description
-<pr_summary [text] />
+<!-- Describe what this PR does and why -->
 
 ### 🔗 Related Issues
-Fixes #<linked_issue_id />
+Fixes #
 
 ### 🛠️ Type of Change
 - [ ] 🚀 New feature
@@ -10,13 +10,15 @@ Fixes #<linked_issue_id />
 - [ ] 📄 Documentation update
 - [ ] 🧪 Testing
 - [ ] 🔨 Refactoring
+- [ ] ⚙️ CI/CD
 
 ### ✅ Checklist
 - [ ] Tests passed locally
 - [ ] Documentation updated
 - [ ] Code follows project style guidelines
 - [ ] Linked to the appropriate Issue
+- [ ] `cargo fmt` and `cargo clippy` pass
 
-### 🏷️ PR Automation
-- **Assignee:** <github_username />
-- **Labels:** <labels [enhancement,documentation,triage] />
+### 🏷️ Metadata
+- **Assignee:** @
+- **Labels:**

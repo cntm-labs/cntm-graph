@@ -1,5 +1,5 @@
 name: Feature Request
-description: Suggest an idea for <project_name />
+description: Suggest an idea for cntm-graph
 labels: ["feat"]
 body:
   - type: textarea

@@ -10,7 +10,7 @@ use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::Result;
 use std::ptr::NonNull;
-use std::simd::{u16x16, f32x16, StdFloat, cmp::SimdPartialEq};
+use std::simd::{u16x16, f32x16, cmp::SimdPartialEq, num::SimdFloat, Select};
 
 /// Initializes or opens a shared memory file of a specified size.
 ///
@@ -301,6 +301,55 @@ impl GraphStore {
             _mmap: mmap,
         })
     }
+
+    /// Finds the node index and weight of the best node matching a target type ID.
+    ///
+    /// This implementation uses SIMD for 16-wide processing and falls back to scalar
+    /// processing for the remainder.
+    pub fn find_best_weighted_simd(&self, target_type: u16) -> (usize, f32) {
+        let type_slice = self.nodes.get_type_slice();
+        let weight_slice = self.nodes.get_weight_slice();
+        
+        let mut best_idx = 0;
+        let mut best_score = -1.0;
+
+        let target_simd = u16x16::splat(target_type);
+        let zero_simd = f32x16::splat(0.0);
+
+        let count = self.nodes.count;
+        let simd_end = (count / 16) * 16;
+
+        for i in (0..simd_end).step_by(16) {
+            let types = u16x16::from_slice(&type_slice[i..i + 16]);
+            let weights = f32x16::from_slice(&weight_slice[i..i + 16]);
+            
+            let mask = types.simd_eq(target_simd);
+            let scores = mask.select(weights, zero_simd);
+            
+            let max_score = scores.reduce_max();
+            if max_score > best_score {
+                // Find index within block
+                for j in 0..16 {
+                    if scores[j] == max_score {
+                        best_score = max_score;
+                        best_idx = i + j;
+                    }
+                }
+            }
+        }
+
+        // Scalar fallback for remainder
+        for i in simd_end..count {
+            if type_slice[i] == target_type {
+                if weight_slice[i] > best_score {
+                    best_score = weight_slice[i];
+                    best_idx = i;
+                }
+            }
+        }
+
+        (best_idx, best_score)
+    }
 }
 
 /// Simple addition function for testing basic functionality.
@@ -407,6 +456,36 @@ mod tests {
                 assert_eq!(*store.edges.weights_ptr, 0.1);
             }
         }
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_simd_traversal() {
+        let path = "test_simd.bin";
+        let _ = std::fs::remove_file(path);
+        let node_cap = 100;
+        let edge_cap = 10;
+
+        let mut store = GraphStore::new(path, node_cap, edge_cap).unwrap();
+        
+        // Add some nodes
+        for i in 0..40 {
+            let type_id = if i % 5 == 0 { 10 } else { 1 };
+            let weight = (i as f32) * 0.1;
+            store.nodes.add_node(i as u64, type_id, weight);
+        }
+
+        // Target type 10, max weight should be at index 35 (35 * 0.1 = 3.5)
+        let (best_idx, best_weight) = store.find_best_weighted_simd(10);
+        assert_eq!(best_idx, 35);
+        assert!((best_weight - 3.5).abs() < f32::EPSILON);
+
+        // Test with remainder (40 nodes, 2x16 SIMD blocks + 8 remainder)
+        store.nodes.add_node(40, 10, 5.0); // Index 40, weight 5.0
+        let (best_idx, best_weight) = store.find_best_weighted_simd(10);
+        assert_eq!(best_idx, 40);
+        assert_eq!(best_weight, 5.0);
+
         let _ = std::fs::remove_file(path);
     }
 }

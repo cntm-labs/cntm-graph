@@ -1,3 +1,17 @@
+use memmap2::MmapMut;
+use std::fs::OpenOptions;
+use std::io::Result;
+
+pub fn init_shared_memory(path: &str, size: usize) -> Result<MmapMut> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(path)?;
+    file.set_len(size as u64)?;
+    unsafe { MmapMut::map_mut(&file) }
+}
+
 #[repr(C, align(64))]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AlignedWeightBlock {
@@ -118,5 +132,13 @@ mod tests {
         let idx = table.add_edge(0, 1, 5, 0.5);
         assert_eq!(table.source_indices[idx], 0);
         assert_eq!(table.target_indices[idx], 1);
+    }
+
+    #[test]
+    fn test_mmap_initialization() {
+        let result = init_shared_memory("test_graph.bin", 1024 * 1024);
+        assert!(result.is_ok());
+        // cleanup
+        let _ = std::fs::remove_file("test_graph.bin");
     }
 }

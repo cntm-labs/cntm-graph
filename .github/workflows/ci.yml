@@ -47,16 +47,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Modular CLI
+      - name: Install Modular and Mojo
         run: |
           curl -s https://get.modular.com | sh -
-          echo "$HOME/.modular/bin" >> $GITHUB_PATH
-      - name: Install Mojo
-        run: |
-          modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
-          modular install mojo
-          echo "MODULAR_HOME=$HOME/.modular" >> $GITHUB_ENV
-          echo "$HOME/.modular/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
+          # The modular CLI is usually in /usr/bin/modular or ~/.modular/bin/modular
+          # Let's ensure it's available
+          if [ -f "$HOME/.modular/bin/modular" ]; then
+            echo "$HOME/.modular/bin" >> $GITHUB_PATH
+            MODULAR_PATH="$HOME/.modular/bin/modular"
+          else
+            MODULAR_PATH="modular"
+          fi
+          
+          $MODULAR_PATH auth ${{ secrets.MODULAR_AUTH_TOKEN }}
+          $MODULAR_PATH install mojo
+          
+          # Add mojo to path
+          MODULAR_HOME=$HOME/.modular
+          echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
+          echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
       - name: Build
         run: mojo build src/main.mojo
       - name: Test

@@ -160,7 +160,7 @@ impl MmapEdgeTable {
 }
 
 pub struct GraphStore {
-    pub mmap: MmapMut,
+    pub _mmap: MmapMut,
     pub nodes: MmapNodeTable,
     pub edges: MmapEdgeTable,
 }
@@ -178,7 +178,7 @@ impl GraphStore {
         let edges = unsafe { MmapEdgeTable::new_from_ptr(base_ptr.add(nodes_size), edge_cap) };
 
         Ok(Self {
-            mmap,
+            _mmap: mmap,
             nodes,
             edges,
         })

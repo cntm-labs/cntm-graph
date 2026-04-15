@@ -1,5 +1,5 @@
 #[repr(C, align(64))]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct AlignedWeightBlock {
     pub values: [f32; 16],
 }
@@ -10,6 +10,7 @@ impl AlignedWeightBlock {
     }
 }
 
+#[derive(Debug)]
 pub struct NodeTable {
     pub ids: Vec<u64>,
     pub type_ids: Vec<u16>,
@@ -36,6 +37,7 @@ impl NodeTable {
     }
 
     pub fn add_node(&mut self, id: u64, type_id: u16, weight: f32) -> usize {
+        debug_assert!(self.count < self.capacity, "NodeTable capacity exceeded");
         let idx = self.count;
         self.ids.push(id);
         self.type_ids.push(type_id);

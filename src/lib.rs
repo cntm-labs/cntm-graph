@@ -50,15 +50,15 @@ impl MmapNodeTable {
     /// # Safety
     /// The `base_ptr` must point to a valid memory region of at least `calculate_mmap_size(capacity)` bytes.
     pub unsafe fn new_from_ptr(base_ptr: *mut u8, capacity: usize) -> Self {
-        let count = unsafe { *(base_ptr as *mut u64) as usize };
-        let ids_offset = align_to_64(8);
-        let type_ids_offset = align_to_64(ids_offset + (capacity * 8));
-        let states_offset = align_to_64(type_ids_offset + (capacity * 2));
-        let weights_offset = align_to_64(states_offset + capacity);
-        let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
-        let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
-
         unsafe {
+            let count = *(base_ptr as *mut u64) as usize;
+            let ids_offset = align_to_64(8);
+            let type_ids_offset = align_to_64(ids_offset + (capacity * 8));
+            let states_offset = align_to_64(type_ids_offset + (capacity * 2));
+            let weights_offset = align_to_64(states_offset + capacity);
+            let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
+            let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
+
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
                 capacity,
@@ -116,13 +116,13 @@ impl MmapEdgeTable {
     /// # Safety
     /// The `base_ptr` must point to a valid memory region of at least `calculate_mmap_size(capacity)` bytes.
     pub unsafe fn new_from_ptr(base_ptr: *mut u8, capacity: usize) -> Self {
-        let count = unsafe { *(base_ptr as *mut u64) as usize };
-        let src_offset = align_to_64(8);
-        let tgt_offset = align_to_64(src_offset + (capacity * 4));
-        let types_offset = align_to_64(tgt_offset + (capacity * 4));
-        let weights_offset = align_to_64(types_offset + (capacity * 2));
-
         unsafe {
+            let count = *(base_ptr as *mut u64) as usize;
+            let src_offset = align_to_64(8);
+            let tgt_offset = align_to_64(src_offset + (capacity * 4));
+            let types_offset = align_to_64(tgt_offset + (capacity * 4));
+            let weights_offset = align_to_64(types_offset + (capacity * 2));
+
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
                 capacity,
@@ -160,9 +160,9 @@ impl MmapEdgeTable {
 }
 
 pub struct GraphStore {
-    pub _mmap: MmapMut,
     pub nodes: MmapNodeTable,
     pub edges: MmapEdgeTable,
+    _mmap: MmapMut,
 }
 
 impl GraphStore {
@@ -178,9 +178,9 @@ impl GraphStore {
         let edges = unsafe { MmapEdgeTable::new_from_ptr(base_ptr.add(nodes_size), edge_cap) };
 
         Ok(Self {
-            _mmap: mmap,
             nodes,
             edges,
+            _mmap: mmap,
         })
     }
 }

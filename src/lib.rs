@@ -7,8 +7,12 @@ pub fn init_shared_memory(path: &str, size: usize) -> Result<MmapMut> {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(path)?;
     file.set_len(size as u64)?;
+    // SAFETY: The file handle is valid and its length has been explicitly set.
+    // Memory mapping is safe as long as the underlying file is not concurrently
+    // truncated or modified in an incompatible way by other processes.
     unsafe { MmapMut::map_mut(&file) }
 }
 
@@ -136,6 +140,7 @@ mod tests {
 
     #[test]
     fn test_mmap_initialization() {
+        let _ = std::fs::remove_file("test_graph.bin");
         let result = init_shared_memory("test_graph.bin", 1024 * 1024);
         assert!(result.is_ok());
         // cleanup

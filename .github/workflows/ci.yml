@@ -49,26 +49,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Modular and Mojo
         run: |
-          curl -s https://get.modular.com | sh -
-          # Find where modular is
-          MODULAR_PATH=$(which modular || echo "$HOME/.modular/bin/modular")
+          # The official script sometimes fails on Ubuntu 24.04 due to repo setup issues.
+          # We'll try the direct debian setup.
+          curl -1sLf 'https://dl.cloudsmith.io/public/modular/stable/cfg/setup/bash.deb.sh' | sudo -E bash -
+          sudo apt-get update
+          sudo apt-get install -y modular
           
-          if [ ! -f "$MODULAR_PATH" ] && [ "$MODULAR_PATH" != "modular" ]; then
-             # Try common locations
-             if [ -f "/usr/bin/modular" ]; then MODULAR_PATH="/usr/bin/modular";
-             elif [ -f "/usr/local/bin/modular" ]; then MODULAR_PATH="/usr/local/bin/modular";
-             fi
-          fi
-
-          echo "Using modular at: $MODULAR_PATH"
-          $MODULAR_PATH auth ${{ secrets.MODULAR_AUTH_TOKEN }}
-          $MODULAR_PATH install mojo
+          # Now modular should be in /usr/bin/modular
+          modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
+          modular install mojo
           
           # Add mojo to path
           MODULAR_HOME=$HOME/.modular
           echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
-          MOJO_PATH=$($MODULAR_PATH config mojo.path 2>/dev/null || echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin")
-          echo "$MOJO_PATH" >> $GITHUB_PATH
+          MOJO_BIN=$(modular config mojo.path 2>/dev/null || echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin")
+          echo "$MOJO_BIN" >> $GITHUB_PATH
       - name: Build
         run: mojo build src/main.mojo
       - name: Test

@@ -33,6 +33,7 @@ pub fn align_to_64(offset: usize) -> usize {
     (offset + 63) & !63
 }
 
+#[derive(Debug)]
 pub struct MmapNodeTable {
     pub ptr: NonNull<u8>,
     pub capacity: usize,
@@ -98,36 +99,56 @@ impl MmapNodeTable {
 }
 
 #[derive(Debug)]
-pub struct EdgeTable {
-    pub source_indices: Vec<u32>,
-    pub target_indices: Vec<u32>,
-    pub edge_types: Vec<u16>,
-    pub edge_weights: Vec<f32>,
+pub struct MmapEdgeTable {
+    pub ptr: NonNull<u8>,
     pub capacity: usize,
     pub count: usize,
+    pub src_ptr: *mut u32,
+    pub tgt_ptr: *mut u32,
+    pub types_ptr: *mut u16,
+    pub weights_ptr: *mut f32,
 }
 
-impl EdgeTable {
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            source_indices: Vec::with_capacity(capacity),
-            target_indices: Vec::with_capacity(capacity),
-            edge_types: Vec::with_capacity(capacity),
-            edge_weights: Vec::with_capacity(capacity),
-            capacity,
-            count: 0,
+impl MmapEdgeTable {
+    pub fn new_from_mmap(mmap: &mut MmapMut, capacity: usize) -> Self {
+        let base_ptr = mmap.as_mut_ptr();
+        let src_offset = 0;
+        let tgt_offset = align_to_64(src_offset + (capacity * 4));
+        let types_offset = align_to_64(tgt_offset + (capacity * 4));
+        let weights_offset = align_to_64(types_offset + (capacity * 2));
+
+        unsafe {
+            Self {
+                ptr: NonNull::new_unchecked(base_ptr),
+                capacity,
+                count: 0,
+                src_ptr: base_ptr.add(src_offset) as *mut u32,
+                tgt_ptr: base_ptr.add(tgt_offset) as *mut u32,
+                types_ptr: base_ptr.add(types_offset) as *mut u16,
+                weights_ptr: base_ptr.add(weights_offset) as *mut f32,
+            }
         }
     }
 
     pub fn add_edge(&mut self, src: u32, tgt: u32, edge_type: u16, weight: f32) -> usize {
         debug_assert!(self.count < self.capacity, "EdgeTable capacity exceeded");
         let idx = self.count;
-        self.source_indices.push(src);
-        self.target_indices.push(tgt);
-        self.edge_types.push(edge_type);
-        self.edge_weights.push(weight);
+        unsafe {
+            self.src_ptr.add(idx).write(src);
+            self.tgt_ptr.add(idx).write(tgt);
+            self.types_ptr.add(idx).write(edge_type);
+            self.weights_ptr.add(idx).write(weight);
+        }
         self.count += 1;
         idx
+    }
+
+    pub fn calculate_mmap_size(capacity: usize) -> usize {
+        let src_offset = 0;
+        let tgt_offset = align_to_64(src_offset + (capacity * 4));
+        let types_offset = align_to_64(tgt_offset + (capacity * 4));
+        let weights_offset = align_to_64(types_offset + (capacity * 2));
+        align_to_64(weights_offset + (capacity * 4))
     }
 }
 
@@ -173,11 +194,25 @@ mod tests {
     }
 
     #[test]
-    fn test_edge_table_addition() {
-        let mut table = EdgeTable::new(1024);
-        let idx = table.add_edge(0, 1, 5, 0.5);
-        assert_eq!(table.source_indices[idx], 0);
-        assert_eq!(table.target_indices[idx], 1);
+    fn test_mmap_edge_table_addition() {
+        let _ = std::fs::remove_file("test_edge_table.bin");
+        let capacity = 1024;
+        let size = MmapEdgeTable::calculate_mmap_size(capacity);
+        let mut mmap = init_shared_memory("test_edge_table.bin", size).unwrap();
+        let mut table = MmapEdgeTable::new_from_mmap(&mut mmap, capacity);
+        
+        let idx = table.add_edge(10, 20, 3, 0.75);
+        assert_eq!(idx, 0);
+        assert_eq!(table.count, 1);
+        
+        unsafe {
+            assert_eq!(*table.src_ptr.add(idx), 10);
+            assert_eq!(*table.tgt_ptr.add(idx), 20);
+            assert_eq!(*table.types_ptr.add(idx), 3);
+            assert_eq!(*table.weights_ptr.add(idx), 0.75);
+        }
+        
+        let _ = std::fs::remove_file("test_edge_table.bin");
     }
 
     #[test]

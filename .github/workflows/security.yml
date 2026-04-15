@@ -51,26 +51,18 @@ jobs:
   
   mojo-security:
     name: Mojo Security Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Install Modular and Mojo
         run: |
-          echo "Setting up Modular repository..."
-          curl -1sLf 'https://dl.cloudsmith.io/public/modular/stable/gpg.6D5B4F1A.key' | sudo gpg --dearmor -o /usr/share/keyrings/modular-stable-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/modular-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/modular/stable/deb/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/modular.list
-          sudo apt-get update
-          sudo apt-get install -y modular
-          
-          echo "Authenticating Modular CLI..."
+          curl -s https://get.modular.com | sh -
+          export PATH=$HOME/.modular/bin:$PATH
           modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
-          
-          echo "Installing Mojo..."
           modular install mojo
           
-          MODULAR_HOME=$HOME/.modular
-          echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
-          MOJO_BIN=$(modular config mojo.path 2>/dev/null || echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin")
-          echo "$MOJO_BIN" >> $GITHUB_PATH
+          echo "MODULAR_HOME=$HOME/.modular" >> $GITHUB_ENV
+          echo "$HOME/.modular/bin" >> $GITHUB_PATH
+          echo "$HOME/.modular/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
       - name: Static Analysis
         run: mojo check src/main.mojo

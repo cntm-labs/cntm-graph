@@ -57,11 +57,11 @@ jobs:
       - name: Install Modular and Mojo
         run: |
           curl -s https://get.modular.com | sh -
-          if [ -f "$HOME/.modular/bin/modular" ]; then
-            echo "$HOME/.modular/bin" >> $GITHUB_PATH
-            MODULAR_PATH="$HOME/.modular/bin/modular"
-          else
-            MODULAR_PATH="modular"
+          MODULAR_PATH=$(which modular || echo "$HOME/.modular/bin/modular")
+          if [ ! -f "$MODULAR_PATH" ] && [ "$MODULAR_PATH" != "modular" ]; then
+             if [ -f "/usr/bin/modular" ]; then MODULAR_PATH="/usr/bin/modular";
+             elif [ -f "/usr/local/bin/modular" ]; then MODULAR_PATH="/usr/local/bin/modular";
+             fi
           fi
           
           $MODULAR_PATH auth ${{ secrets.MODULAR_AUTH_TOKEN }}
@@ -69,6 +69,7 @@ jobs:
           
           MODULAR_HOME=$HOME/.modular
           echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
-          echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
+          MOJO_PATH=$($MODULAR_PATH config mojo.path 2>/dev/null || echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin")
+          echo "$MOJO_PATH" >> $GITHUB_PATH
       - name: Static Analysis
         run: mojo check src/main.mojo

@@ -50,22 +50,25 @@ jobs:
       - name: Install Modular and Mojo
         run: |
           curl -s https://get.modular.com | sh -
-          # The modular CLI is usually in /usr/bin/modular or ~/.modular/bin/modular
-          # Let's ensure it's available
-          if [ -f "$HOME/.modular/bin/modular" ]; then
-            echo "$HOME/.modular/bin" >> $GITHUB_PATH
-            MODULAR_PATH="$HOME/.modular/bin/modular"
-          else
-            MODULAR_PATH="modular"
-          fi
+          # Find where modular is
+          MODULAR_PATH=$(which modular || echo "$HOME/.modular/bin/modular")
           
+          if [ ! -f "$MODULAR_PATH" ] && [ "$MODULAR_PATH" != "modular" ]; then
+             # Try common locations
+             if [ -f "/usr/bin/modular" ]; then MODULAR_PATH="/usr/bin/modular";
+             elif [ -f "/usr/local/bin/modular" ]; then MODULAR_PATH="/usr/local/bin/modular";
+             fi
+          fi
+
+          echo "Using modular at: $MODULAR_PATH"
           $MODULAR_PATH auth ${{ secrets.MODULAR_AUTH_TOKEN }}
           $MODULAR_PATH install mojo
           
           # Add mojo to path
           MODULAR_HOME=$HOME/.modular
           echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
-          echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
+          MOJO_PATH=$($MODULAR_PATH config mojo.path 2>/dev/null || echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin")
+          echo "$MOJO_PATH" >> $GITHUB_PATH
       - name: Build
         run: mojo build src/main.mojo
       - name: Test

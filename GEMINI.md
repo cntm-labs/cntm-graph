@@ -2,30 +2,42 @@
 
 This file is the operational core. Gemini CLI MUST follow these protocols to maintain project integrity.
 
-## 🎯 Architectural Intent
-- **Core Mission:** The Autonomous Self-Healing Graph for AGI
-- **Primary Stack:** Rust, Shared Memory (SHM), FlatBuffers, SIMD (AVX-512), Mojo FFI
-- **System Nature:** High-performance, low-level graph engine for AI memory mapping.
+## 🎯 Architectural Intent & Core Identity
+- **Mission:** 'The Autonomous Self-Healing Graph for AGI'.
+- **Identity:** A high-performance, low-level graph engine serving as the memory and cognition layer for AGI.
+- **Key Technology Stack:** Rust (Core Kernel), Mojo (Cognition Layer/FFI), Shared Memory (SHM/mmap), FlatBuffers (Zero-copy), SIMD (AVX-512/NEON), and Lean Proof Assistant (Formal verification of graph mutations).
+- **Core Features:** Sub-nanosecond latency traversal, billion-scale self-healing nodes, and temporal knowledge evolution via BlowTime integration.
+- **Architectural Philosophy:** Fusing symbolic logic (Lean) with neural performance (Mojo/SIMD) through a zero-copy memory bridge.
+- **Current Roadmap Phase:** Q2 2026 - Kernel Development and project bootstrapping.
+
+## 🌐 Ecosystem & Integration
+- **Sister Repositories:** @../chronos/ และ @../isotime/
+- **Roles in Ecosystem:**
+    - **chronos:** เลเยอร์การจัดการ (Orchestration Layer) ที่ใช้ 'cntm-graph' เป็นหน่วยความจำหลัก และ 'isotime' สำหรับการบันทึกข้อมูลเชิงเวลา
+    - **isotime (BlowTime):** เลเยอร์การบันทึกข้อมูลเชิงเวลา (Temporal Persistence Layer) ที่ดึงข้อมูล zero-copy deltas จาก 'cntm-graph' ผ่าน Shared Memory (SHM) แบบเรียลไทม์
+- **Operational Protocol:** หากเกิดปัญหาการสร้าง (build-time) หรือข้อขัดแย้งทางสถาปัตยกรรมที่เกิดจากการรวมระบบเหล่านี้ ให้รายงานและติดตามปัญหาเป็น issue ในคลังข้อมูล 'chronos' หรือ 'isotime' ที่เกี่ยวข้องเพื่อการแก้ไขทั้งระบบ
+- **Context:** โครงการทั้งสามนี้รวมกันเป็นเฟรมเวิร์ก 'Standard Memory for AGI'
 
 ## 🧬 Automated Lifecycle Management
-1. **Research Sync:** When `./scripts/update_notebookLM.sh` is executed:
-   - You MUST update `DESIGN_DECISIONS.md` with new graph optimization ADRs found in research.
-   - **Constraint:** Maintain a rolling log of the **latest 10 ADRs**.
+1. **Research Sync:** เมื่อมีการรัน `./scripts/update_notebookLM.sh`:
+   - คุณต้องอัปเดต `DESIGN_DECISIONS.md` พร้อม ADR การเพิ่มประสิทธิภาพกราฟใหม่ๆ ที่พบจากการวิจัย
+   - **ข้อจำกัด:** รักษาบันทึกของ **10 ADR ล่าสุด**
 2. **Logic Verification:** 
-   - All new graph mutations and engine kernel updates MUST pass Lean verification before commit.
-   - Ensure `LEAN_PATH` is configured correctly for the CI environment.
+   - การเปลี่ยนแปลงโครงสร้างกราฟและการอัปเดตแกนหลักของเอนจินทั้งหมดต้องผ่านการตรวจสอบด้วย Lean ก่อนการคอมมิต
+   - ตรวจสอบให้แน่ใจว่าได้กำหนดค่า `LEAN_PATH` อย่างถูกต้องสำหรับสภาพแวดล้อม CI
 3. **Performance CI:** 
-   - Every Pull Request MUST execute the `Zero-copy latency benchmark` via `cargo bench`.
-   - Regressions > 5% in traversal speed must be flagged and reviewed by a Senior Architect.
-4. **PR Creation Protocol:** When instructed to create a Pull Request:
-   - **Summarize:** Analyze all commit messages since the last merge to `main`.
-   - **Template:** Read `.github/PULL_REQUEST_TEMPLATE.md` and populate it with a detailed description.
-   - **Assign:** Automatically set the current developer as the Assignee.
+   - ทุก Pull Request ต้องรัน `Zero-copy latency benchmark` ผ่าน `cargo bench`
+   - หากความเร็วในการประมวลผลลดลง (Regression) > 5% ต้องมีการทำเครื่องหมายและตรวจสอบโดย Senior Architect
+4. **PR Creation Protocol:** เมื่อได้รับคำสั่งให้สร้าง Pull Request:
+   - **สรุป:** วิเคราะห์ข้อความคอมมิตทั้งหมดตั้งแต่การรวม (merge) ครั้งล่าสุดเข้าสู่ `main`
+   - **เทมเพลต:** อ่าน `.github/PULL_REQUEST_TEMPLATE.md` และกรอกข้อมูลรายละเอียดให้ครบถ้วน
+   - **มอบหมาย:** ตั้งค่าผู้พัฒนาปัจจุบันเป็นผู้รับผิดชอบ (Assignee) โดยอัตโนมัติ
 
 ## 🛠️ Tooling & Standards
-- **Translation:** All technical specifications are English. `locales/` MUST be kept in sync.
-- **Workflow Mastery:** Use `/superpower:executing-plans` for feature work.
-- **Automation:** Refer to `.github/workflows/pr_automation.yml` for server-side PR handling.
+- **การแปล:** ข้อมูลจำเพาะทางเทคนิคทั้งหมดเป็นภาษาอังกฤษ `locales/` ต้องได้รับการซิงค์เสมอ
+- **ความชำนาญในเวิร์กโฟลว์:** ใช้ `/superpower:executing-plans` สำหรับการพัฒนาฟีเจอร์
+- **ระบบอัตโนมัติ:** อ้างอิงถึง `.github/workflows/pr_automation.yml` สำหรับการจัดการ PR ฝั่งเซิร์ฟเวอร์
 
-## 📂 Template Inventory
-You manage: ARCHITECTURE.md, ROADMAP.md, CONTRIBUTING.md, DESIGN_DECISIONS.md, STRUCTURE.tree, SECURITY.md, LICENSE.md, FAQ.md, GOVERNANCE.md, SUPPORT.md, TROUBLESHOOTING.md, PHILOSOPHY.md, MANIFESTO.md, and `locales/README.{th,ja,zh}.md`.
+## 📂 Template Inventory & Key References
+- **Managed Templates:** ARCHITECTURE.md, ROADMAP.md, CONTRIBUTING.md, DESIGN_DECISIONS.md, STRUCTURE.tree, SECURITY.md, LICENSE.md, FAQ.md, GOVERNANCE.md, SUPPORT.md, TROUBLESHOOTING.md, PHILOSOPHY.md, MANIFESTO.md, และ `locales/README.{th,ja,zh}.md`
+- **Key Context Files:** ARCHITECTURE.md, PHILOSOPHY.md, MANIFESTO.md, และ VISION.md.

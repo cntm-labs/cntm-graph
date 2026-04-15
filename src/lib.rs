@@ -1,6 +1,7 @@
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::Result;
+use std::ptr::NonNull;
 
 pub fn init_shared_memory(path: &str, size: usize) -> Result<MmapMut> {
     let file = OpenOptions::new()
@@ -28,43 +29,71 @@ impl AlignedWeightBlock {
     }
 }
 
-#[derive(Debug)]
-pub struct NodeTable {
-    pub ids: Vec<u64>,
-    pub type_ids: Vec<u16>,
-    pub states: Vec<u8>,
-    pub weights: Vec<f32>,
-    pub timestamps: Vec<u64>,
-    pub ext_offsets: Vec<u32>,
-    pub capacity: usize,
-    pub count: usize,
+pub fn align_to_64(offset: usize) -> usize {
+    (offset + 63) & !63
 }
 
-impl NodeTable {
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            ids: Vec::with_capacity(capacity),
-            type_ids: Vec::with_capacity(capacity),
-            states: Vec::with_capacity(capacity),
-            weights: Vec::with_capacity(capacity),
-            timestamps: Vec::with_capacity(capacity),
-            ext_offsets: Vec::with_capacity(capacity),
-            capacity,
-            count: 0,
+pub struct MmapNodeTable {
+    pub ptr: NonNull<u8>,
+    pub capacity: usize,
+    pub count: usize,
+    pub ids_ptr: *mut u64,
+    pub type_ids_ptr: *mut u16,
+    pub states_ptr: *mut u8,
+    pub weights_ptr: *mut f32,
+    pub timestamps_ptr: *mut u64,
+    pub ext_offsets_ptr: *mut u32,
+}
+
+impl MmapNodeTable {
+    pub fn new_from_mmap(mmap: &mut MmapMut, capacity: usize) -> Self {
+        let base_ptr = mmap.as_mut_ptr();
+        let ids_offset = 0;
+        let type_ids_offset = align_to_64(ids_offset + (capacity * 8));
+        let states_offset = align_to_64(type_ids_offset + (capacity * 2));
+        let weights_offset = align_to_64(states_offset + (capacity * 1));
+        let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
+        let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
+
+        unsafe {
+            Self {
+                ptr: NonNull::new_unchecked(base_ptr),
+                capacity,
+                count: 0,
+                ids_ptr: base_ptr.add(ids_offset) as *mut u64,
+                type_ids_ptr: base_ptr.add(type_ids_offset) as *mut u16,
+                states_ptr: base_ptr.add(states_offset) as *mut u8,
+                weights_ptr: base_ptr.add(weights_offset) as *mut f32,
+                timestamps_ptr: base_ptr.add(timestamps_offset) as *mut u64,
+                ext_offsets_ptr: base_ptr.add(ext_offsets_offset) as *mut u32,
+            }
         }
     }
 
     pub fn add_node(&mut self, id: u64, type_id: u16, weight: f32) -> usize {
         debug_assert!(self.count < self.capacity, "NodeTable capacity exceeded");
         let idx = self.count;
-        self.ids.push(id);
-        self.type_ids.push(type_id);
-        self.states.push(1); // Active
-        self.weights.push(weight);
-        self.timestamps.push(0); // Placeholder
-        self.ext_offsets.push(0);
+        unsafe {
+            self.ids_ptr.add(idx).write(id);
+            self.type_ids_ptr.add(idx).write(type_id);
+            self.states_ptr.add(idx).write(1); // Active
+            self.weights_ptr.add(idx).write(weight);
+            self.timestamps_ptr.add(idx).write(0); // Placeholder
+            self.ext_offsets_ptr.add(idx).write(0);
+        }
         self.count += 1;
         idx
+    }
+
+    pub fn calculate_mmap_size(capacity: usize) -> usize {
+        let ids_offset = 0;
+        let type_ids_offset = align_to_64(ids_offset + (capacity * 8));
+        let states_offset = align_to_64(type_ids_offset + (capacity * 2));
+        let weights_offset = align_to_64(states_offset + (capacity * 1));
+        let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
+        let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
+        // Calculate the end of the last array (ext_offsets) and align it
+        align_to_64(ext_offsets_offset + (capacity * 4))
     }
 }
 
@@ -124,10 +153,23 @@ mod tests {
 
     #[test]
     fn test_node_table_addition() {
-        let mut table = NodeTable::new(1024);
+        let _ = std::fs::remove_file("test_node_table.bin");
+        let capacity = 1024;
+        let size = MmapNodeTable::calculate_mmap_size(capacity);
+        let mut mmap = init_shared_memory("test_node_table.bin", size).unwrap();
+        let mut table = MmapNodeTable::new_from_mmap(&mut mmap, capacity);
+        
         let idx = table.add_node(12345, 1, 0.85);
-        assert_eq!(table.ids[idx], 12345);
-        assert_eq!(table.weights[idx], 0.85);
+        assert_eq!(idx, 0);
+        assert_eq!(table.count, 1);
+        
+        unsafe {
+            assert_eq!(*table.ids_ptr.add(idx), 12345);
+            assert_eq!(*table.weights_ptr.add(idx), 0.85);
+            assert_eq!(*table.states_ptr.add(idx), 1);
+        }
+        
+        let _ = std::fs::remove_file("test_node_table.bin");
     }
 
     #[test]

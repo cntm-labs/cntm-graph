@@ -1,5 +1,5 @@
 //! CNTM-Graph Kernel: High-performance Hybrid Mmap-DOD Graph Engine.
-//! 
+//!
 //! This library provides the core graph engine implementation for the CNTM-Graph system,
 //! focusing on zero-copy shared memory access, 64-byte alignment for SIMD optimization,
 //! and a Data-Oriented Design (DOD) layout.
@@ -25,7 +25,7 @@ pub fn init_shared_memory(path: &str, size: usize) -> Result<MmapMut> {
         .truncate(false)
         .open(path)?;
     file.set_len(size as u64)?;
-    
+
     // SAFETY: The file handle is valid and its length has been explicitly set to `size`.
     // Memory mapping is safe here as long as the underlying file is not concurrently
     // truncated or modified by other processes in a way that invalidates this mapping.
@@ -57,7 +57,7 @@ pub fn align_to_64(offset: usize) -> usize {
 }
 
 /// A Data-Oriented Design (DOD) table for nodes stored in memory-mapped files.
-/// 
+///
 /// All fields are stored in contiguous arrays to maximize cache locality and
 /// enable efficient SIMD operations. The layout is 64-byte aligned.
 #[derive(Debug)]
@@ -121,9 +121,12 @@ impl MmapNodeTable {
     /// # Panics
     /// Panics if the table's capacity is exceeded in debug builds.
     pub fn add_node(&mut self, id: u64, type_id: u16, weight: f32) -> usize {
-        debug_assert!(self.count < self.capacity, "MmapNodeTable capacity exceeded");
+        debug_assert!(
+            self.count < self.capacity,
+            "MmapNodeTable capacity exceeded"
+        );
         let idx = self.count;
-        
+
         // SAFETY: We have verified that `idx < capacity`, so the pointer offsets are within bounds
         // defined during `new_from_ptr`.
         unsafe {
@@ -154,7 +157,7 @@ impl MmapNodeTable {
 }
 
 /// A Data-Oriented Design (DOD) table for edges stored in memory-mapped files.
-/// 
+///
 /// Optimized for fast traversal and SIMD processing with 64-byte aligned array fields.
 #[derive(Debug)]
 pub struct MmapEdgeTable {
@@ -209,9 +212,12 @@ impl MmapEdgeTable {
     /// # Panics
     /// Panics if the table's capacity is exceeded in debug builds.
     pub fn add_edge(&mut self, src: u32, tgt: u32, edge_type: u16, weight: f32) -> usize {
-        debug_assert!(self.count < self.capacity, "MmapEdgeTable capacity exceeded");
+        debug_assert!(
+            self.count < self.capacity,
+            "MmapEdgeTable capacity exceeded"
+        );
         let idx = self.count;
-        
+
         // SAFETY: Pointer offsets are safe because `idx < capacity`.
         unsafe {
             self.src_ptr.add(idx).write(src);
@@ -307,7 +313,7 @@ mod tests {
         let capacity = 1024;
         let size = MmapNodeTable::calculate_mmap_size(capacity);
         let mut mmap = init_shared_memory("test_node_table.bin", size).unwrap();
-        
+
         // SAFETY: Testing raw pointer access to the initialized memory mapping.
         let mut table = unsafe { MmapNodeTable::new_from_ptr(mmap.as_mut_ptr(), capacity) };
 
@@ -331,7 +337,7 @@ mod tests {
         let capacity = 1024;
         let size = MmapEdgeTable::calculate_mmap_size(capacity);
         let mut mmap = init_shared_memory("test_edge_table.bin", size).unwrap();
-        
+
         // SAFETY: Testing raw pointer access to initialized edge table memory.
         let mut table = unsafe { MmapEdgeTable::new_from_ptr(mmap.as_mut_ptr(), capacity) };
 

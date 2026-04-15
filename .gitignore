@@ -24,3 +24,4 @@ shm_*.tmp
 .superpowers/brainstorm/*/state/
 .superpowers/brainstorm/*/content/*.html
 !.superpowers/brainstorm/index.html
+full_mojo_log.txt

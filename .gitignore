@@ -1,1 +1,26 @@
+# Build Artifacts
 /target
+/dist
+/build
+*.so
+*.dylib
+*.dll
+*.bin
+*.exe
+
+# Shared Memory / Data Files (Test data)
+graph.bin
+test_graph.bin
+shm_*.tmp
+
+# IDEs & OS Files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Specifics
+.superpowers/brainstorm/*/state/
+.superpowers/brainstorm/*/content/*.html
+!.superpowers/brainstorm/index.html

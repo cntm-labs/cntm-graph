@@ -1,0 +1,12 @@
+# Labeler configuration
+rust:
+  - 'Cargo.toml'
+  - 'src/**/*.rs'
+mojo:
+  - 'src/**/*.mojo'
+  - 'src/**/*.🔥'
+ci:
+  - '.github/workflows/*'
+docs:
+  - '*.md'
+  - 'locales/*'

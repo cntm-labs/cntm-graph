@@ -50,13 +50,13 @@ jobs:
       - name: Install Modular CLI
         run: |
           curl -s https://get.modular.com | sh -
-          modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
+          echo "$HOME/.modular/bin" >> $GITHUB_PATH
       - name: Install Mojo
         run: |
+          modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
           modular install mojo
-          MODULAR_HOME=$HOME/.modular
-          echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
-          echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
+          echo "MODULAR_HOME=$HOME/.modular" >> $GITHUB_ENV
+          echo "$HOME/.modular/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
       - name: Build
         run: mojo build src/main.mojo
       - name: Test

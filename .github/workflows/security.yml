@@ -54,12 +54,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Modular CLI
-        uses: modular/setup-modular@v2
-        with:
-          token: ${{ secrets.MODULAR_AUTH_TOKEN }}
+      - name: Install Modular CLI
+        run: |
+          curl -s https://get.modular.com | sh -
+          echo "$HOME/.modular/bin" >> $GITHUB_PATH
       - name: Install Mojo
-        run: modular install mojo
+        run: |
+          modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
+          modular install mojo
+          echo "MODULAR_HOME=$HOME/.modular" >> $GITHUB_ENV
+          echo "$HOME/.modular/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
       - name: Static Analysis
-        run: mojo check .
-
+        run: mojo check src/main.mojo

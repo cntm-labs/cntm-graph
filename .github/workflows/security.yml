@@ -51,17 +51,19 @@ jobs:
   
   mojo-security:
     name: Mojo Security Check
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
       - name: Install Modular and Mojo
         run: |
           curl -s https://get.modular.com | sh -
-          export PATH=$HOME/.modular/bin:$PATH
+          sudo apt-get update && sudo apt-get install -y modular
+          
           modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
           modular install mojo
           
-          echo "MODULAR_HOME=$HOME/.modular" >> $GITHUB_ENV
+          MODULAR_HOME=$HOME/.modular
+          echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
           echo "$HOME/.modular/bin" >> $GITHUB_PATH
           echo "$HOME/.modular/pkg/packages.modular.com_mojo/bin" >> $GITHUB_PATH
       - name: Static Analysis

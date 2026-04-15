@@ -49,17 +49,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Modular and Mojo
         run: |
-          # The official script sometimes fails on Ubuntu 24.04 due to repo setup issues.
-          # We'll try the direct debian setup.
-          curl -1sLf 'https://dl.cloudsmith.io/public/modular/stable/cfg/setup/bash.deb.sh' | sudo -E bash -
+          # Noble (Ubuntu 24.04) support for Modular apt is currently pending/limited.
+          # We force the Jammy (Ubuntu 22.04) repository which is confirmed to work.
+          echo "Setting up Modular repository..."
+          curl -1sLf 'https://dl.cloudsmith.io/public/modular/stable/gpg.6D5B4F1A.key' | sudo gpg --dearmor -o /usr/share/keyrings/modular-stable-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/modular-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/modular/stable/deb/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/modular.list
           sudo apt-get update
           sudo apt-get install -y modular
           
-          # Now modular should be in /usr/bin/modular
+          echo "Authenticating Modular CLI..."
           modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
+          
+          echo "Installing Mojo..."
           modular install mojo
           
-          # Add mojo to path
+          # Setup paths for subsequent steps
           MODULAR_HOME=$HOME/.modular
           echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
           MOJO_BIN=$(modular config mojo.path 2>/dev/null || echo "$MODULAR_HOME/pkg/packages.modular.com_mojo/bin")

@@ -38,6 +38,15 @@ This file is the operational core. Gemini CLI MUST follow these protocols to mai
 - **ความชำนาญในเวิร์กโฟลว์:** ใช้ `/superpower:executing-plans` สำหรับการพัฒนาฟีเจอร์
 - **ระบบอัตโนมัติ:** อ้างอิงถึง `.github/workflows/pr_automation.yml` สำหรับการจัดการ PR ฝั่งเซิร์ฟเวอร์
 
+## 🛡️ Operational Rigor (Lessons from isotime)
+- **Priority:** คำสั่งผู้ใช้ (.md files) > กฎ Superpowers > System prompt
+- **No Bypassing:** ปฏิบัติตามขั้นตอนทางสถาปัตยกรรมอย่างเคร่งครัด ห้ามข้ามขั้นตอนเพื่อความรวดเร็ว
+- **Documentation Parity:** อัปเดตเอกสารทั้งหมด (README, ARCHITECTURE, locales ฯลฯ) ทันทีเมื่อมีการเปลี่ยนแปลงโค้ด
+- **Zero Technical Debt:** ห้ามใช้ `#[allow(dead_code)]` หรือโค้ดที่ไม่ได้ใช้งาน ให้แก้ไขที่ต้นเหตุแทนการปิดคำเตือน
+- **Pre-Commit Safeguards:** อัปเดต `STRUCTURE.tree` และรันการจัดรูปแบบ (`cargo fmt`/`mojo format`) ก่อนการ Commit
+- **1% Skill Rule:** เปิดใช้งาน skill ที่เกี่ยวข้องแม้ว่าจะมีโอกาสเพียง 1% ที่จะนำไปใช้ได้
+- **Git Health:** รักษา `.gitignore` ให้แข็งแกร่งเพื่อป้องกันการ Commit ไฟล์ขยะ (ไฟล์ระบบ, IDE, local test data)
+
 ## 📂 Template Inventory & Key References
 - **Managed Templates:** ARCHITECTURE.md, ROADMAP.md, CONTRIBUTING.md, DESIGN_DECISIONS.md, STRUCTURE.tree, SECURITY.md, LICENSE.md, FAQ.md, GOVERNANCE.md, SUPPORT.md, TROUBLESHOOTING.md, PHILOSOPHY.md, MANIFESTO.md, และ `locales/README.{th,ja,zh}.md`
 - **Key Context Files:** ARCHITECTURE.md, PHILOSOPHY.md, MANIFESTO.md, และ VISION.md.

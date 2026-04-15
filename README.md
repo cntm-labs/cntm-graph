@@ -11,7 +11,7 @@
 
 ![Rust LOD](https://img.shields.io/badge/Rust_LOD-0-dea584.svg) ![Mojo LOD](https://img.shields.io/badge/Mojo_LOD-0-CC0000.svg) ![Total LOD](https://img.shields.io/badge/Total_LOD-0-brightgreen.svg)
 
-[![Rust](https://img.shields.io/badge/Rust-dea584?logo=rust&logoColor=white)](./) [![Mojo](https://img.shields.io/badge/Mojo-CC0000?logo=mojo&logoColor=white)](./) [![FlatBuffers](https://img.shields.io/badge/FlatBuffers-4285F4?logo=google&logoColor=white)](./) [![SIMD](https://img.shields.io/badge/SIMD-555555)](./) [![SHM](https://img.shields.io/badge/SHM-555555)](./) [![SHM](https://img.shields.io/badge/SHM-555555)](./)
+[![Rust](https://img.shields.io/badge/Rust-dea584?logo=rust&logoColor=white)](./) [![Mojo](https://img.shields.io/badge/Mojo-CC0000?logo=mojo&logoColor=white)](./) [![FlatBuffers](https://img.shields.io/badge/FlatBuffers-4285F4?logo=google&logoColor=white)](./) [![SIMD](https://img.shields.io/badge/SIMD-555555)](./) [![SHM](https://img.shields.io/badge/SHM-555555)](./) [![mmap](https://img.shields.io/badge/mmap-555555)](./)
 
 </div>
 
@@ -24,6 +24,8 @@ The Continuum Graph Engine (cntm-graph) is a high-performance, low-level graph e
 ## ✨ Features
 
 - 🚀 **Zero-Copy AI-Memory Bridge** — Direct memory mapping (mmap) providing instant access to graph nodes from Mojo/C++ engines with zero latency.
+- 🏗️ **Data-Oriented Design (DOD)** — Optimized Structure of Arrays (SoA) layout for peak CPU cache efficiency and billion-scale node traversal.
+- ⚡ **AVX-512 SIMD Acceleration** — Explicit 64-byte memory alignment allowing vectorized processing of 16 nodes per instruction.
 - 🛡️ **Formalized Truth Verification** — Integrated Lean proof assistant logic to verify graph mutations, preventing AI hallucinations at the structural level.
 - 📊 **Temporal Evolution Engine** — Powered by BlowTime integration, capturing the chronological evolution of knowledge with delta-based compression.
 
@@ -38,7 +40,7 @@ cd cntm-graph
 cargo build --release
 
 # Run performance benchmarks
-cargo bench
+cargo test --release
 ```
 
 ## 🗺️ Navigation

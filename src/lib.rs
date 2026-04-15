@@ -4,10 +4,13 @@
 //! focusing on zero-copy shared memory access, 64-byte alignment for SIMD optimization,
 //! and a Data-Oriented Design (DOD) layout.
 
+#![feature(portable_simd)]
+
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::Result;
 use std::ptr::NonNull;
+use std::simd::{u16x16, f32x16, StdFloat, cmp::SimdPartialEq};
 
 /// Initializes or opens a shared memory file of a specified size.
 ///
@@ -114,6 +117,20 @@ impl MmapNodeTable {
                 ext_offsets_ptr: base_ptr.add(ext_offsets_offset) as *mut u32,
             }
         }
+    }
+
+    /// Returns a slice of node type IDs.
+    pub fn get_type_slice(&self) -> &[u16] {
+        // SAFETY: `type_ids_ptr` is initialized in `new_from_ptr` and its lifetime
+        // is tied to the memory mapping, which we assume is valid for the duration
+        // of `self`.
+        unsafe { std::slice::from_raw_parts(self.type_ids_ptr, self.count) }
+    }
+
+    /// Returns a slice of node weights.
+    pub fn get_weight_slice(&self) -> &[f32] {
+        // SAFETY: Same as `get_type_slice`, the pointer is valid for `count` elements.
+        unsafe { std::slice::from_raw_parts(self.weights_ptr, self.count) }
     }
 
     /// Adds a new node to the table and returns its index.

@@ -1,12 +1,23 @@
-# Labeler configuration
+# Labeler configuration for actions/labeler v5
 rust:
-  - 'Cargo.toml'
-  - 'src/**/*.rs'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Cargo.toml'
+          - 'src/**/*.rs'
+
 mojo:
-  - 'src/**/*.mojo'
-  - 'src/**/*.🔥'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/**/*.mojo'
+          - 'src/**/*.🔥'
+
 ci:
-  - '.github/workflows/*'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/*'
+
 docs:
-  - '*.md'
-  - 'locales/*'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'locales/*'

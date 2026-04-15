@@ -1,0 +1,23 @@
+# Labeler configuration for actions/labeler v5
+rust:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Cargo.toml'
+          - 'src/**/*.rs'
+
+mojo:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/**/*.mojo'
+          - 'src/**/*.🔥'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/*'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'locales/*'

@@ -10,11 +10,9 @@ fn scalar_traversal(store: &GraphStore, target_type: u16) -> (usize, f32) {
     let mut best_score = -1.0;
 
     for i in 0..store.nodes.count {
-        if type_slice[i] == target_type {
-            if weight_slice[i] > best_score {
-                best_score = weight_slice[i];
-                best_idx = i;
-            }
+        if type_slice[i] == target_type && weight_slice[i] > best_score {
+            best_score = weight_slice[i];
+            best_idx = i;
         }
     }
     (best_idx, best_score)

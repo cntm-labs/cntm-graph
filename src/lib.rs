@@ -10,7 +10,7 @@ use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::Result;
 use std::ptr::NonNull;
-use std::simd::{u16x16, f32x16, cmp::SimdPartialEq, num::SimdFloat, Select};
+use std::simd::{Select, cmp::SimdPartialEq, f32x16, num::SimdFloat, u16x16};
 
 /// Initializes or opens a shared memory file of a specified size.
 ///
@@ -309,7 +309,7 @@ impl GraphStore {
     pub fn find_best_weighted_simd(&self, target_type: u16) -> (usize, f32) {
         let type_slice = self.nodes.get_type_slice();
         let weight_slice = self.nodes.get_weight_slice();
-        
+
         let mut best_idx = 0;
         let mut best_score = -1.0;
 
@@ -322,10 +322,10 @@ impl GraphStore {
         for i in (0..simd_end).step_by(16) {
             let types = u16x16::from_slice(&type_slice[i..i + 16]);
             let weights = f32x16::from_slice(&weight_slice[i..i + 16]);
-            
+
             let mask = types.simd_eq(target_simd);
             let scores = mask.select(weights, zero_simd);
-            
+
             let max_score = scores.reduce_max();
             if max_score > best_score {
                 // Find index within block
@@ -340,11 +340,9 @@ impl GraphStore {
 
         // Scalar fallback for remainder
         for i in simd_end..count {
-            if type_slice[i] == target_type {
-                if weight_slice[i] > best_score {
-                    best_score = weight_slice[i];
-                    best_idx = i;
-                }
+            if type_slice[i] == target_type && weight_slice[i] > best_score {
+                best_score = weight_slice[i];
+                best_idx = i;
             }
         }
 
@@ -467,7 +465,7 @@ mod tests {
         let edge_cap = 10;
 
         let mut store = GraphStore::new(path, node_cap, edge_cap).unwrap();
-        
+
         // Add some nodes
         for i in 0..40 {
             let type_id = if i % 5 == 0 { 10 } else { 1 };

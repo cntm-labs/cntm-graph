@@ -1,27 +1,4 @@
 .
-├── .github
-│   ├── ISSUE_TEMPLATE
-│   │   ├── bug_report.yml
-│   │   └── feature_request.yml
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   ├── labeler.yml
-│   └── workflows
-│       ├── ci.yml
-│       ├── pr_automation.yml
-│       └── security.yml
-├── .gitignore
-├── .pre-commit-config.yaml
-├── .superpowers
-│   └── brainstorm
-│       └── 41911-1776265340
-│           ├── content
-│           │   ├── dod-implementation.html
-│           │   ├── hybrid-design.html
-│           │   ├── recommendation.html
-│           │   └── welcome.html
-│           └── state
-│               ├── server-stopped
-│               └── server.pid
 ├── ARCHITECTURE.md
 ├── CLAUDE.md
 ├── CODE_OF_CONDUCT.md
@@ -45,13 +22,17 @@
 ├── SUPPORT.md
 ├── TROUBLESHOOTING.md
 ├── VISION.md
+├── benches
+│   └── traversal_bench.rs
 ├── docs
 │   └── superpowers
 │       ├── plans
 │       │   ├── 2026-04-15-hybrid-dod-graph-kernel.md
-│       │   └── 2026-04-15-mmap-refactor.md
+│       │   ├── 2026-04-15-mmap-refactor.md
+│       │   └── 2026-04-15-simd-traversal.md
 │       ├── specs
-│       │   └── 2026-04-15-hybrid-dod-graph-kernel-design.md
+│       │   ├── 2026-04-15-hybrid-dod-graph-kernel-design.md
+│       │   └── 2026-04-15-unified-simd-pipeline-design.md
 │       └── tasks
 │           ├── 2026-04-15-hybrid-dod-graph-kernel-tasks.md
 │           └── 2026-04-15-mmap-refactor-tasks.md
@@ -62,8 +43,9 @@
 │   ├── README.ja.md
 │   ├── README.th.md
 │   └── README.zh.md
+├── rust-toolchain.toml
 └── src
     ├── lib.rs
     └── main.mojo
 
-17 directories, 50 files
+10 directories, 39 files

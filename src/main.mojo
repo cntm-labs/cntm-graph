@@ -41,6 +41,9 @@ struct MojoNodeTable:
     fn get_id(self, idx: Int) -> UInt64:
         return self.ids_ptr[idx]
 
+    fn get_ext_offset(self, idx: Int) -> UInt32:
+        return self.ext_offsets_ptr[idx]
+
 @value
 struct MojoEdgeTable:
     """Mirrors the Rust MmapEdgeTable for zero-copy access."""
@@ -77,13 +80,21 @@ struct MojoGraphStore:
     """Mirrors the Rust GraphStore for zero-copy access across the FFI bridge."""
     var nodes: MojoNodeTable
     var edges: MojoEdgeTable
+    var nodes_meta_ptr: UnsafePointer[UInt8]
 
-    fn __init__(inout self, base_ptr: UnsafePointer[UInt8], node_cap: Int, edge_cap: Int):
+    fn __init__(
+        inout self, 
+        base_ptr: UnsafePointer[UInt8], 
+        nodes_meta_ptr: UnsafePointer[UInt8],
+        node_cap: Int, 
+        edge_cap: Int
+    ):
         # Calculate node table size to find where edge table starts
         let nodes_size = self._calculate_node_table_size(node_cap)
         
         self.nodes = MojoNodeTable(base_ptr, node_cap)
         self.edges = MojoEdgeTable(base_ptr.offset(nodes_size), edge_cap)
+        self.nodes_meta_ptr = nodes_meta_ptr
 
     @staticmethod
     fn _align_to_64(offset: Int) -> Int:
@@ -94,17 +105,25 @@ struct MojoGraphStore:
         let ids_offset = MojoGraphStore._align_to_64(8)
         let type_ids_offset = MojoGraphStore._align_to_64(ids_offset + (capacity * 8))
         let states_offset = MojoGraphStore._align_to_64(type_ids_offset + (capacity * 2))
-        let weights_offset = MojoGraphStore._align_to_64(states_offset + capacity)
+        let weights_offset = MojoGraphStore._align_to_64(weights_offset + (capacity * 4))
         let timestamps_offset = MojoGraphStore._align_to_64(weights_offset + (capacity * 4))
         let ext_offsets_offset = MojoGraphStore._align_to_64(timestamps_offset + (capacity * 8))
         return MojoGraphStore._align_to_64(ext_offsets_offset + (capacity * 4))
 
+    fn get_node_metadata_offset(self, idx: Int) -> UInt32:
+        return self.nodes.get_ext_offset(idx)
+
+    fn read_metadata_root(self, offset: UInt32) -> Int:
+        """Example: read the first 4 bytes at offset (FlatBuffers root table offset)."""
+        let off = int(offset)
+        return int(self.nodes_meta_ptr.offset(off).bitcast[UInt32]()[0])
+
 fn main():
     print("Mojo Zero-Copy Bridge: Initialized")
     print("Mojo Side: Fully mirrored Rust GraphStore layout (64-byte alignment)")
+    print("Mojo Side: Added metadata file mapping support")
     
-    # Example usage (simulated)
-    # let base_ptr = ... (from mmap)
-    # let store = MojoGraphStore(base_ptr, 1000, 5000)
+    # In a real system, we'd use mmap for nodes.meta as well
+    # let nodes_meta_ptr = ... (from mmap("test_store.bin.nodes.meta"))
     
-    print("Mojo Zero-Copy Bridge: Ready to read Rust Graph Kernel")
+    print("Mojo Zero-Copy Bridge: Ready to read FlatBuffers metadata at Hot Path offsets")

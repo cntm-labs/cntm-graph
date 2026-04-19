@@ -30,7 +30,7 @@ Instead of a single `struct Node`, properties are split across parallel arrays f
 | `type_ids` | `u16` | 2-byte | Schema-defined node type |
 | `states` | `u8` | 1-byte | Lifecycle: Active, Deleted, Locked |
 | `weights` | `f32` | 4-byte | Neural importance (Hot Path) |
-| `timestamps` | `u64` | 8-byte | BlowTime temporal sync |
+| `timestamps` | `u64` | 8-byte | Isotime temporal sync |
 | `ext_offsets` | `u32` | 4-byte | Offset to FlatBuffers metadata (Cold Path) |
 
 ### 4.2 Edge Table

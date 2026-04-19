@@ -6,7 +6,7 @@ This file is the operational core. Gemini CLI MUST follow these protocols to mai
 - **Mission:** 'The Autonomous Self-Healing Graph for AGI'.
 - **Identity:** A high-performance, low-level graph engine serving as the memory and cognition layer for AGI.
 - **Key Technology Stack:** Rust (Core Kernel), Mojo (Cognition Layer/FFI), Shared Memory (SHM/mmap), FlatBuffers (Zero-copy), SIMD (AVX-512/NEON), and Lean Proof Assistant (Formal verification of graph mutations).
-- **Core Features:** Sub-nanosecond latency traversal, billion-scale self-healing nodes, and temporal knowledge evolution via BlowTime integration.
+- **Core Features:** Sub-nanosecond latency traversal, billion-scale self-healing nodes, and temporal knowledge evolution via Isotime integration.
 - **Architectural Philosophy:** Fusing symbolic logic (Lean) with neural performance (Mojo/SIMD) through a zero-copy memory bridge.
 - **Current Roadmap Phase:** Q2 2026 - Kernel Development and project bootstrapping.
 
@@ -14,7 +14,7 @@ This file is the operational core. Gemini CLI MUST follow these protocols to mai
 - **Sister Repositories:** @../chronos/ และ @../isotime/
 - **Roles in Ecosystem:**
     - **chronos:** เลเยอร์การจัดการ (Orchestration Layer) ที่ใช้ 'cntm-graph' เป็นหน่วยความจำหลัก และ 'isotime' สำหรับการบันทึกข้อมูลเชิงเวลา
-    - **isotime (BlowTime):** เลเยอร์การบันทึกข้อมูลเชิงเวลา (Temporal Persistence Layer) ที่ดึงข้อมูล zero-copy deltas จาก 'cntm-graph' ผ่าน Shared Memory (SHM) แบบเรียลไทม์
+    - **Isotime:** เลเยอร์การบันทึกข้อมูลเชิงเวลา (Temporal Persistence Layer) ที่ดึงข้อมูล zero-copy deltas จาก 'cntm-graph' ผ่าน Shared Memory (SHM) แบบเรียลไทม์
 - **Operational Protocol:** หากเกิดปัญหาการสร้าง (build-time) หรือข้อขัดแย้งทางสถาปัตยกรรมที่เกิดจากการรวมระบบเหล่านี้ ให้รายงานและติดตามปัญหาเป็น issue ในคลังข้อมูล 'chronos' หรือ 'isotime' ที่เกี่ยวข้องเพื่อการแก้ไขทั้งระบบ
 - **Context:** โครงการทั้งสามนี้รวมกันเป็นเฟรมเวิร์ก 'Standard Memory for AGI'
 
@@ -37,6 +37,7 @@ This file is the operational core. Gemini CLI MUST follow these protocols to mai
 - **การแปล:** ข้อมูลจำเพาะทางเทคนิคทั้งหมดเป็นภาษาอังกฤษ `locales/` ต้องได้รับการซิงค์เสมอ
 - **ความชำนาญในเวิร์กโฟลว์:** ใช้ `/superpower:executing-plans` สำหรับการพัฒนาฟีเจอร์
 - **ระบบอัตโนมัติ:** อ้างอิงถึง `.github/workflows/pr_automation.yml` สำหรับการจัดการ PR ฝั่งเซิร์ฟเวอร์
+- **Naming Convention:** เรียก 'Isotime' ว่า 'Isotime' เสมอ (Isotime คือ Temporal Persistence Layer ของระบบ)
 
 ## 🛡️ Operational Rigor (Lessons from isotime)
 - **Priority:** คำสั่งผู้ใช้ (.md files) > กฎ Superpowers > System prompt

@@ -156,7 +156,7 @@ impl NodeTable {
         self.type_ids.push(type_id);
         self.states.push(1); // Active
         self.weights.push(weight);
-        self.timestamps.push(0); // Placeholder for BlowTime
+        self.timestamps.push(0); // Placeholder for Isotime
         self.ext_offsets.push(0);
         self.count += 1;
         idx

@@ -29,10 +29,12 @@
 │       ├── plans
 │       │   ├── 2026-04-15-hybrid-dod-graph-kernel.md
 │       │   ├── 2026-04-15-mmap-refactor.md
-│       │   └── 2026-04-15-simd-traversal.md
+│       │   ├── 2026-04-15-simd-traversal.md
+│       │   └── 2026-04-17-flatbuffers-metadata.md
 │       ├── specs
 │       │   ├── 2026-04-15-hybrid-dod-graph-kernel-design.md
-│       │   └── 2026-04-15-unified-simd-pipeline-design.md
+│       │   ├── 2026-04-15-unified-simd-pipeline-design.md
+│       │   └── 2026-04-17-flatbuffers-metadata-design.md
 │       └── tasks
 │           ├── 2026-04-15-hybrid-dod-graph-kernel-tasks.md
 │           └── 2026-04-15-mmap-refactor-tasks.md
@@ -44,8 +46,15 @@
 │   ├── README.th.md
 │   └── README.zh.md
 ├── rust-toolchain.toml
-└── src
-    ├── lib.rs
-    └── main.mojo
+├── src
+│   ├── lib.rs
+│   ├── main.mojo
+│   ├── metadata.fbs
+│   ├── metadata.rs
+│   └── metadata_generated.rs
+├── test_simd.bin.edges.meta
+├── test_simd.bin.nodes.meta
+├── test_store.bin.edges.meta
+└── test_store.bin.nodes.meta
 
-10 directories, 39 files
+10 directories, 48 files

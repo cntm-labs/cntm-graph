@@ -1,0 +1,21 @@
+namespace Metadata;
+
+table BasicInfo {
+  name: string;
+  description: string;
+}
+
+table SemanticInfo {
+  external_id: string;
+  provenance: string;
+  confidence: float;
+}
+
+union EntryData { BasicInfo, SemanticInfo }
+
+table MetadataEntry {
+  data: EntryData;
+  isotime_ref: ulong;
+}
+
+root_type MetadataEntry;

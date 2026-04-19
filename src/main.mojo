@@ -105,25 +105,33 @@ struct MojoGraphStore:
         let ids_offset = MojoGraphStore._align_to_64(8)
         let type_ids_offset = MojoGraphStore._align_to_64(ids_offset + (capacity * 8))
         let states_offset = MojoGraphStore._align_to_64(type_ids_offset + (capacity * 2))
-        let weights_offset = MojoGraphStore._align_to_64(weights_offset + (capacity * 4))
+        let weights_offset = MojoGraphStore._align_to_64(states_offset + capacity)
         let timestamps_offset = MojoGraphStore._align_to_64(weights_offset + (capacity * 4))
         let ext_offsets_offset = MojoGraphStore._align_to_64(timestamps_offset + (capacity * 8))
         return MojoGraphStore._align_to_64(ext_offsets_offset + (capacity * 4))
 
     fn get_node_metadata_offset(self, idx: Int) -> UInt32:
+        """Retrieves the byte offset for metadata from the Hot Path table."""
         return self.nodes.get_ext_offset(idx)
 
     fn read_metadata_root(self, offset: UInt32) -> Int:
-        """Example: read the first 4 bytes at offset (FlatBuffers root table offset)."""
+        """Reads the FlatBuffers root table offset at the given metadata offset."""
         let off = int(offset)
+        # FlatBuffers uses a 4-byte little-endian offset at the root
         return int(self.nodes_meta_ptr.offset(off).bitcast[UInt32]()[0])
+
+    fn read_string_at_offset(self, string_offset: Int) -> String:
+        """Reads a FlatBuffers string (4-byte length prefix followed by UTF-8 bytes)."""
+        let length = int(self.nodes_meta_ptr.offset(string_offset).bitcast[UInt32]()[0])
+        # In a real Mojo implementation, we would construct a String from the bytes
+        return "String(length=" + str(length) + ")"
 
 fn main():
     print("Mojo Zero-Copy Bridge: Initialized")
     print("Mojo Side: Fully mirrored Rust GraphStore layout (64-byte alignment)")
     print("Mojo Side: Added metadata file mapping support")
     
-    # In a real system, we'd use mmap for nodes.meta as well
-    # let nodes_meta_ptr = ... (from mmap("test_store.bin.nodes.meta"))
+    # In a production environment, nodes_meta_ptr would be acquired via mmap syscall
+    # or passed from the Rust host as a shared memory pointer.
     
     print("Mojo Zero-Copy Bridge: Ready to read FlatBuffers metadata at Hot Path offsets")

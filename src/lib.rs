@@ -6,6 +6,9 @@
 
 #![feature(portable_simd)]
 
+pub mod metadata;
+pub mod metadata_generated;
+
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::Result;

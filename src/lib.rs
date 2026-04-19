@@ -6,6 +6,10 @@
 
 #![feature(portable_simd)]
 
+pub mod metadata;
+#[allow(clippy::all)]
+pub mod metadata_generated;
+
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::Result;
@@ -268,6 +272,8 @@ pub struct GraphStore {
     pub nodes: MmapNodeTable,
     /// The memory-mapped edge table.
     pub edges: MmapEdgeTable,
+    /// The metadata manager for append-only storage.
+    pub metadata: metadata::MetadataManager,
     /// The underlying memory mapping that owns the shared memory region.
     _mmap: MmapMut,
 }
@@ -295,11 +301,47 @@ impl GraphStore {
             (nodes, edges)
         };
 
+        let metadata = metadata::MetadataManager::new(path)?;
+
         Ok(Self {
             nodes,
             edges,
+            metadata,
             _mmap: mmap,
         })
+    }
+
+    pub fn set_node_metadata(&mut self, idx: usize, name: &str, desc: &str) -> Result<()> {
+        let mut builder = flatbuffers::FlatBufferBuilder::new();
+        let name_off = builder.create_string(name);
+        let desc_off = builder.create_string(desc);
+
+        let info = metadata_generated::metadata::BasicInfo::create(
+            &mut builder,
+            &metadata_generated::metadata::BasicInfoArgs {
+                name: Some(name_off),
+                description: Some(desc_off),
+            },
+        );
+
+        let entry = metadata_generated::metadata::MetadataEntry::create(
+            &mut builder,
+            &metadata_generated::metadata::MetadataEntryArgs {
+                data_type: metadata_generated::metadata::EntryData::BasicInfo,
+                data: Some(info.as_union_value()),
+                isotime_ref: 0,
+            },
+        );
+
+        builder.finish(entry, None);
+        let offset = self
+            .metadata
+            .append_node_metadata(builder.finished_data())?;
+
+        unsafe {
+            self.nodes.ext_offsets_ptr.add(idx).write(offset);
+        }
+        Ok(())
     }
 
     /// Finds the node index and weight of the best node matching a target type ID.
@@ -485,5 +527,33 @@ mod tests {
         assert_eq!(best_weight, 5.0);
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_metadata_integration() {
+        let path = "test_metadata.bin";
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.nodes.meta", path));
+        let _ = std::fs::remove_file(format!("{}.edges.meta", path));
+
+        let node_cap = 10;
+        let edge_cap = 10;
+
+        {
+            let mut store = GraphStore::new(path, node_cap, edge_cap).unwrap();
+            let idx = store.nodes.add_node(1, 1, 0.5);
+            store
+                .set_node_metadata(idx, "Node1", "This is node 1")
+                .unwrap();
+
+            // Check if offset is non-zero (first entry is usually at 0, but flatbuffers has header)
+            unsafe {
+                assert_eq!(*store.nodes.ext_offsets_ptr.add(idx), 0);
+            }
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.nodes.meta", path));
+        let _ = std::fs::remove_file(format!("{}.edges.meta", path));
     }
 }

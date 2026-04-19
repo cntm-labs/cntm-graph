@@ -7,6 +7,7 @@
 #![feature(portable_simd)]
 
 pub mod metadata;
+#[allow(clippy::all)]
 pub mod metadata_generated;
 
 use memmap2::MmapMut;
@@ -314,21 +315,29 @@ impl GraphStore {
         let mut builder = flatbuffers::FlatBufferBuilder::new();
         let name_off = builder.create_string(name);
         let desc_off = builder.create_string(desc);
-        
-        let info = metadata_generated::metadata::BasicInfo::create(&mut builder, &metadata_generated::metadata::BasicInfoArgs {
-            name: Some(name_off),
-            description: Some(desc_off),
-        });
-        
-        let entry = metadata_generated::metadata::MetadataEntry::create(&mut builder, &metadata_generated::metadata::MetadataEntryArgs {
-            data_type: metadata_generated::metadata::EntryData::BasicInfo,
-            data: Some(info.as_union_value()),
-            isotime_ref: 0,
-        });
-        
+
+        let info = metadata_generated::metadata::BasicInfo::create(
+            &mut builder,
+            &metadata_generated::metadata::BasicInfoArgs {
+                name: Some(name_off),
+                description: Some(desc_off),
+            },
+        );
+
+        let entry = metadata_generated::metadata::MetadataEntry::create(
+            &mut builder,
+            &metadata_generated::metadata::MetadataEntryArgs {
+                data_type: metadata_generated::metadata::EntryData::BasicInfo,
+                data: Some(info.as_union_value()),
+                isotime_ref: 0,
+            },
+        );
+
         builder.finish(entry, None);
-        let offset = self.metadata.append_node_metadata(builder.finished_data())?;
-        
+        let offset = self
+            .metadata
+            .append_node_metadata(builder.finished_data())?;
+
         unsafe {
             self.nodes.ext_offsets_ptr.add(idx).write(offset);
         }
@@ -526,18 +535,20 @@ mod tests {
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.nodes.meta", path));
         let _ = std::fs::remove_file(format!("{}.edges.meta", path));
-        
+
         let node_cap = 10;
         let edge_cap = 10;
 
         {
             let mut store = GraphStore::new(path, node_cap, edge_cap).unwrap();
             let idx = store.nodes.add_node(1, 1, 0.5);
-            store.set_node_metadata(idx, "Node1", "This is node 1").unwrap();
-            
+            store
+                .set_node_metadata(idx, "Node1", "This is node 1")
+                .unwrap();
+
             // Check if offset is non-zero (first entry is usually at 0, but flatbuffers has header)
             unsafe {
-                assert!(*store.nodes.ext_offsets_ptr.add(idx) >= 0);
+                assert_eq!(*store.nodes.ext_offsets_ptr.add(idx), 0);
             }
         }
 

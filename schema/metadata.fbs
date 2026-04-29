@@ -1,0 +1,31 @@
+namespace cntm_graph;
+
+union Value {
+  StringValue,
+  IntValue,
+  FloatValue
+}
+
+table StringValue {
+  val: string;
+}
+
+table IntValue {
+  val: long;
+}
+
+table FloatValue {
+  val: float;
+}
+
+table Property {
+  key: string;
+  value: Value;
+}
+
+table NodeMetadata {
+  name: string;
+  properties: [Property];
+}
+
+root_type NodeMetadata;

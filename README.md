@@ -27,7 +27,7 @@ The Continuum Graph Engine (cntm-graph) is a high-performance, low-level graph e
 - 🏗️ **Data-Oriented Design (DOD)** — Optimized Structure of Arrays (SoA) layout for peak CPU cache efficiency and billion-scale node traversal.
 - ⚡ **AVX-512 SIMD Acceleration** — Explicit 64-byte memory alignment allowing vectorized processing of 16 nodes per instruction.
 - 🛡️ **Formalized Truth Verification** — Integrated Lean proof assistant logic to verify graph mutations, preventing AI hallucinations at the structural level.
-- 📊 **Temporal Evolution Engine** — Powered by BlowTime integration, capturing the chronological evolution of knowledge with delta-based compression.
+- 📊 **Temporal Evolution Engine** — Powered by Isotime integration, capturing the chronological evolution of knowledge with delta-based compression.
 
 ## 🛠️ Quick Start
 

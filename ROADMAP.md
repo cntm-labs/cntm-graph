@@ -17,7 +17,7 @@ The Autonomous Self-Healing Graph for AGI
 
 ### Phase 2: Scale (Q3 2026)
 - [ ] Optimize **AVX-512 SIMD** Vectorized Traversal.
-- [ ] Integrate **BlowTime** for temporal knowledge evolution.
+- [ ] Integrate **Isotime** for temporal knowledge evolution.
 - [ ] Implement **Lean Proof Assistant** for mutation verification.
 
 ### Phase 3: Excellence (Q4 2026)

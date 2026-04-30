@@ -12,6 +12,7 @@
 graph.bin
 test_graph.bin
 shm_*.tmp
+*.meta
 
 # IDEs & OS Files
 .DS_Store

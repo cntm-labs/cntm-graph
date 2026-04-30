@@ -22,7 +22,7 @@ graph TD
   end
   
   subgraph Persistence [Temporal Layer]
-    BT[BlowTime Time-Series]
+    BT[Isotime Time-Series]
   end
 
   Mojo <--> SHM
@@ -54,7 +54,7 @@ All core data buffers are explicitly aligned to **64-byte boundaries**. This ens
   - **Serialization:** FlatBuffers (Zero-copy metadata)
   - **Acceleration:** SIMD (AVX-512/NEON)
   - **Verification:** Lean Proof Assistant (Formal mutation verification)
-  - **Storage:** BlowTime (Temporal time-series integration)
+  - **Storage:** Isotime (Temporal time-series integration)
 
 ## 🔗 Internal References
 - Engineering rules: [PRINCIPLES.md](PRINCIPLES.md)

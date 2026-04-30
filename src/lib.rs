@@ -7,6 +7,8 @@
 #![feature(portable_simd)]
 
 pub mod metadata;
+#[allow(clippy::all)]
+pub mod metadata_generated;
 
 use memmap2::MmapMut;
 use std::fs::OpenOptions;

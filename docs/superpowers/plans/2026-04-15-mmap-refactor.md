@@ -54,14 +54,14 @@ fn align_to_64(offset: usize) -> usize {
 impl MmapNodeTable {
     pub fn new_from_mmap(mmap: &mut memmap2::MmapMut, capacity: usize) -> Self {
         let base_ptr = mmap.as_mut_ptr();
-        
+
         let ids_offset = 0;
         let type_ids_offset = align_to_64(ids_offset + (capacity * 8));
         let states_offset = align_to_64(type_ids_offset + (capacity * 2));
         let weights_offset = align_to_64(states_offset + (capacity * 1));
         let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
         let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
-        
+
         unsafe {
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),

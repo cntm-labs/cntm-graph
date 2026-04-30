@@ -12,6 +12,7 @@
 graph.bin
 test_graph.bin
 shm_*.tmp
+*.meta
 
 # IDEs & OS Files
 .DS_Store
@@ -25,4 +26,6 @@ shm_*.tmp
 .superpowers/brainstorm/*/content/*.html
 !.superpowers/brainstorm/index.html
 full_mojo_log.txt
-*.meta
+# pixi environments
+.pixi/*
+!.pixi/config.toml

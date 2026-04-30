@@ -22,10 +22,10 @@ This file is the operational core. Gemini CLI MUST follow these protocols to mai
 1. **Research Sync:** เมื่อมีการรัน `./scripts/update_notebookLM.sh`:
    - คุณต้องอัปเดต `DESIGN_DECISIONS.md` พร้อม ADR การเพิ่มประสิทธิภาพกราฟใหม่ๆ ที่พบจากการวิจัย
    - **ข้อจำกัด:** รักษาบันทึกของ **10 ADR ล่าสุด**
-2. **Logic Verification:** 
+2. **Logic Verification:**
    - การเปลี่ยนแปลงโครงสร้างกราฟและการอัปเดตแกนหลักของเอนจินทั้งหมดต้องผ่านการตรวจสอบด้วย Lean ก่อนการคอมมิต
    - ตรวจสอบให้แน่ใจว่าได้กำหนดค่า `LEAN_PATH` อย่างถูกต้องสำหรับสภาพแวดล้อม CI
-3. **Performance CI:** 
+3. **Performance CI:**
    - ทุก Pull Request ต้องรัน `Zero-copy latency benchmark` ผ่าน `cargo bench`
    - หากความเร็วในการประมวลผลลดลง (Regression) > 5% ต้องมีการทำเครื่องหมายและตรวจสอบโดย Senior Architect
 4. **PR Creation Protocol:** เมื่อได้รับคำสั่งให้สร้าง Pull Request:

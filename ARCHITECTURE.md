@@ -9,18 +9,18 @@ graph TD
   subgraph AI_Layer [Chronos AI - Mojo/CUDA]
     Mojo[Mojo Cognition]
   end
-  
+
   subgraph Memory_Bridge [Zero-Copy Interface]
     SHM[Shared Memory / mmap]
     FB[FlatBuffers Serialization]
   end
-  
+
   subgraph Graph_Core [cntm-graph - Rust Engine]
     Kernel[Rust Graph Kernel]
     SIMD[SIMD Vectorized Traversal]
     Lean[Lean Logic Verifier]
   end
-  
+
   subgraph Persistence [Temporal Layer]
     BT[Isotime Time-Series]
   end
@@ -49,7 +49,7 @@ All core data buffers are explicitly aligned to **64-byte boundaries**. This ens
 
 ## 🛠️ Technology Stack
 - **Programming Languages:** Rust (Core Kernel), Mojo (Cognition/FFI), C++ (FFI Bridge)
-- **Tooling & Infrastructure:** 
+- **Tooling & Infrastructure:**
   - **Memory:** Shared Memory (SHM), `memmap2`, `mmap`
   - **Serialization:** FlatBuffers (Zero-copy metadata)
   - **Acceleration:** SIMD (AVX-512/NEON)

@@ -1,0 +1,13 @@
+[workspace]
+authors = ["MrBT-nano <mr.bt1590@gmail.com>"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+name = "cntm-graph"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+mojo = ">=1.0.0b1.dev2026042706,<2"
+flatbuffers = ">=25.12.19,<26"
+pre-commit = ">=4.6.0,<5"

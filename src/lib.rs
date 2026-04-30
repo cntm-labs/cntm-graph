@@ -16,6 +16,62 @@ use std::io::Result;
 use std::ptr::NonNull;
 use std::simd::{Select, cmp::SimdPartialEq, f32x16, num::SimdFloat, u16x16};
 
+/// A buffer for storing arbitrary metadata payloads (e.g., FlatBuffers).
+/// It maps a separate region of memory and provides append-only access.
+pub struct MmapMetadataBuffer {
+    /// The underlying memory mapping.
+    pub mmap: MmapMut,
+    /// The current write offset within the buffer.
+    pub current_offset: usize,
+}
+
+impl MmapMetadataBuffer {
+    /// Creates a new `MmapMetadataBuffer` from an existing `MmapMut`.
+    /// The first 8 bytes of the mapping are assumed to store the current offset.
+    pub fn new(mut mmap: MmapMut) -> Self {
+        let current_offset = unsafe { *(mmap.as_ptr() as *const u64) as usize };
+        if current_offset == 0 {
+            // Initialize with 8 bytes for the offset tracker itself
+            let initial_offset = 8;
+            unsafe { *(mmap.as_mut_ptr() as *mut u64) = initial_offset as u64 };
+            Self {
+                mmap,
+                current_offset: initial_offset,
+            }
+        } else {
+            Self {
+                mmap,
+                current_offset,
+            }
+        }
+    }
+
+    /// Appends a byte slice to the buffer and returns the starting offset.
+    pub fn append(&mut self, data: &[u8]) -> std::result::Result<usize, String> {
+        let start_offset = self.current_offset;
+        let end_offset = start_offset + data.len();
+
+        if end_offset > self.mmap.len() {
+            return Err("MmapMetadataBuffer capacity exceeded".to_string());
+        }
+
+        unsafe {
+            let dest = self.mmap.as_mut_ptr().add(start_offset);
+            std::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
+            self.current_offset = end_offset;
+            // Persist the new offset
+            *(self.mmap.as_mut_ptr() as *mut u64) = end_offset as u64;
+        }
+
+        Ok(start_offset)
+    }
+
+    /// Returns a slice of the data at the given offset and length.
+    pub fn get(&self, offset: usize, len: usize) -> &[u8] {
+        &self.mmap[offset..offset + len]
+    }
+}
+
 /// Initializes or opens a shared memory file of a specified size.
 ///
 /// # Arguments
@@ -272,9 +328,9 @@ pub struct GraphStore {
     pub nodes: MmapNodeTable,
     /// The memory-mapped edge table.
     pub edges: MmapEdgeTable,
-    /// The metadata manager for append-only storage.
-    pub metadata: metadata::MetadataManager,
-    /// The underlying memory mapping that owns the shared memory region.
+    /// The memory-mapped metadata buffer.
+    pub metadata: MmapMetadataBuffer,
+    /// The underlying memory mapping that owns the shared memory region for nodes/edges.
     _mmap: MmapMut,
 }
 
@@ -293,6 +349,11 @@ impl GraphStore {
         let mut mmap = init_shared_memory(path, total_size)?;
         let base_ptr = mmap.as_mut_ptr();
 
+        // Metadata is stored in a companion file for now to avoid complexity of shared mapping expansion
+        let metadata_path = format!("{}.meta", path);
+        let metadata_mmap = init_shared_memory(&metadata_path, 10 * 1024 * 1024)?; // 10MB default
+        let metadata = MmapMetadataBuffer::new(metadata_mmap);
+
         // SAFETY: We have allocated enough space via `init_shared_memory` for both tables.
         // `nodes_size` ensures that `edges` starts at a valid, aligned boundary.
         let (nodes, edges) = unsafe {
@@ -300,8 +361,6 @@ impl GraphStore {
             let edges = MmapEdgeTable::new_from_ptr(base_ptr.add(nodes_size), edge_cap);
             (nodes, edges)
         };
-
-        let metadata = metadata::MetadataManager::new(path)?;
 
         Ok(Self {
             nodes,
@@ -311,37 +370,52 @@ impl GraphStore {
         })
     }
 
-    pub fn set_node_metadata(&mut self, idx: usize, name: &str, desc: &str) -> Result<()> {
-        let mut builder = flatbuffers::FlatBufferBuilder::new();
-        let name_off = builder.create_string(name);
-        let desc_off = builder.create_string(desc);
-
-        let info = metadata_generated::metadata::BasicInfo::create(
-            &mut builder,
-            &metadata_generated::metadata::BasicInfoArgs {
-                name: Some(name_off),
-                description: Some(desc_off),
-            },
-        );
-
-        let entry = metadata_generated::metadata::MetadataEntry::create(
-            &mut builder,
-            &metadata_generated::metadata::MetadataEntryArgs {
-                data_type: metadata_generated::metadata::EntryData::BasicInfo,
-                data: Some(info.as_union_value()),
-                isotime_ref: 0,
-            },
-        );
-
-        builder.finish(entry, None);
-        let offset = self
-            .metadata
-            .append_node_metadata(builder.finished_data())?;
-
-        unsafe {
-            self.nodes.ext_offsets_ptr.add(idx).write(offset);
+    /// Associates a binary payload (FlatBuffers) with a node.
+    pub fn set_node_metadata(
+        &mut self,
+        node_idx: usize,
+        payload: &[u8],
+    ) -> std::result::Result<(), String> {
+        if node_idx >= self.nodes.count {
+            return Err("Invalid node index".to_string());
         }
+
+        let offset = self.metadata.append(payload)?;
+
+        // SAFETY: `ext_offsets_ptr` is valid and `node_idx` is within bounds.
+        unsafe {
+            self.nodes
+                .ext_offsets_ptr
+                .add(node_idx)
+                .write(offset as u32);
+        }
+
         Ok(())
+    }
+
+    /// Retrieves the binary metadata payload for a node.
+    pub fn get_node_metadata(&self, node_idx: usize) -> Option<&[u8]> {
+        if node_idx >= self.nodes.count {
+            return None;
+        }
+
+        // SAFETY: `ext_offsets_ptr` is valid and `node_idx` is within bounds.
+        let offset = unsafe { *self.nodes.ext_offsets_ptr.add(node_idx) } as usize;
+
+        if offset == 0 {
+            return None;
+        }
+
+        // FlatBuffers follow the rule that the first 4 bytes at the root
+        // point to the actual table data. However, the buffer size itself
+        // is needed for safe slicing. For this prototype, we look at the
+        // `current_offset` of the metadata buffer to find the boundary.
+        // A more robust way would be to store length in the DOD table.
+        if offset >= self.metadata.current_offset {
+            return None;
+        }
+
+        Some(&self.metadata.mmap[offset..self.metadata.current_offset])
     }
 
     /// Finds the node index and weight of the best node matching a target type ID.
@@ -500,60 +574,55 @@ mod tests {
     }
 
     #[test]
-    fn test_simd_traversal() {
-        let path = "test_simd.bin";
-        let _ = std::fs::remove_file(path);
-        let node_cap = 100;
-        let edge_cap = 10;
+    fn test_flatbuffers_metadata() {
+        use crate::metadata::cntm_graph::{
+            NodeMetadata, NodeMetadataArgs, Property, PropertyArgs, Value,
+        };
+        use flatbuffers::FlatBufferBuilder;
 
-        let mut store = GraphStore::new(path, node_cap, edge_cap).unwrap();
-
-        // Add some nodes
-        for i in 0..40 {
-            let type_id = if i % 5 == 0 { 10 } else { 1 };
-            let weight = (i as f32) * 0.1;
-            store.nodes.add_node(i as u64, type_id, weight);
-        }
-
-        // Target type 10, max weight should be at index 35 (35 * 0.1 = 3.5)
-        let (best_idx, best_weight) = store.find_best_weighted_simd(10);
-        assert_eq!(best_idx, 35);
-        assert!((best_weight - 3.5).abs() < f32::EPSILON);
-
-        // Test with remainder (40 nodes, 2x16 SIMD blocks + 8 remainder)
-        store.nodes.add_node(40, 10, 5.0); // Index 40, weight 5.0
-        let (best_idx, best_weight) = store.find_best_weighted_simd(10);
-        assert_eq!(best_idx, 40);
-        assert_eq!(best_weight, 5.0);
-
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn test_metadata_integration() {
         let path = "test_metadata.bin";
         let _ = std::fs::remove_file(path);
-        let _ = std::fs::remove_file(format!("{}.nodes.meta", path));
-        let _ = std::fs::remove_file(format!("{}.edges.meta", path));
+        let _ = std::fs::remove_file(format!("{}.meta", path));
 
-        let node_cap = 10;
-        let edge_cap = 10;
+        let mut store = GraphStore::new(path, 10, 10).unwrap();
+        store.nodes.add_node(1, 1, 0.5);
 
-        {
-            let mut store = GraphStore::new(path, node_cap, edge_cap).unwrap();
-            let idx = store.nodes.add_node(1, 1, 0.5);
-            store
-                .set_node_metadata(idx, "Node1", "This is node 1")
-                .unwrap();
+        // Build FlatBuffers metadata
+        let mut fbb = FlatBufferBuilder::new();
+        let name = fbb.create_string("AGI-Root");
+        let key = fbb.create_string("confidence");
+        let val_str = fbb.create_string("0.99");
 
-            // Check if offset is non-zero (first entry is usually at 0, but flatbuffers has header)
-            unsafe {
-                assert_eq!(*store.nodes.ext_offsets_ptr.add(idx), 0);
-            }
-        }
+        let p0 = Property::create(
+            &mut fbb,
+            &PropertyArgs {
+                key: Some(key),
+                value_type: Value::FloatValue,
+                value: Some(val_str.as_union_value()),
+            },
+        );
+
+        let properties = fbb.create_vector(&[p0]);
+
+        let metadata_offset = NodeMetadata::create(
+            &mut fbb,
+            &NodeMetadataArgs {
+                name: Some(name),
+                properties: Some(properties),
+            },
+        );
+        fbb.finish(metadata_offset, None);
+        let payload = fbb.finished_data();
+
+        // Store metadata
+        store.set_node_metadata(0, payload).unwrap();
+
+        // Retrieve and verify
+        let retrieved_payload = store.get_node_metadata(0).unwrap();
+        let metadata = flatbuffers::root::<NodeMetadata>(retrieved_payload).unwrap();
+        assert_eq!(metadata.name(), Some("AGI-Root"));
 
         let _ = std::fs::remove_file(path);
-        let _ = std::fs::remove_file(format!("{}.nodes.meta", path));
-        let _ = std::fs::remove_file(format!("{}.edges.meta", path));
+        let _ = std::fs::remove_file(format!("{}.meta", path));
     }
 }

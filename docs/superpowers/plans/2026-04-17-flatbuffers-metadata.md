@@ -76,10 +76,10 @@ impl MetadataManager {
     pub fn new(base_path: &str) -> std::io::Result<Self> {
         let node_path = format!("{}.nodes.meta", base_path);
         let edge_path = format!("{}.edges.meta", base_path);
-        
+
         let node_file = OpenOptions::new().create(true).append(true).read(true).open(node_path)?;
         let edge_file = OpenOptions::new().create(true).append(true).read(true).open(edge_path)?;
-        
+
         Ok(Self { node_file, edge_file })
     }
 
@@ -125,21 +125,21 @@ impl GraphStore {
         let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
         let name_off = builder.create_string(name);
         let desc_off = builder.create_string(desc);
-        
+
         let info = metadata_generated::Metadata::BasicInfo::create(&mut builder, &metadata_generated::Metadata::BasicInfoArgs {
             name: Some(name_off),
             description: Some(desc_off),
         });
-        
+
         let entry = metadata_generated::Metadata::MetadataEntry::create(&mut builder, &metadata_generated::Metadata::MetadataEntryArgs {
             data_type: metadata_generated::Metadata::EntryData::BasicInfo,
             data: Some(info.as_union_value()),
             isotime_ref: 0,
         });
-        
+
         builder.finish(entry, None);
         let offset = self.metadata.append_node_metadata(builder.finished_data())?;
-        
+
         unsafe {
             self.nodes.ext_offsets_ptr.add(idx).write(offset);
         }

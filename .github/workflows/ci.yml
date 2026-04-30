@@ -6,28 +6,28 @@ on:
     branches: [main, master]
 
 jobs:
-  
+
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt, clippy
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-  
+
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -54,10 +54,10 @@ jobs:
   #         curl -s https://get.modular.com | sh -
   #         # Explicitly install the modular package
   #         sudo apt-get update && sudo apt-get install -y modular
-  #         
+  #
   #         modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
   #         modular install mojo
-  #         
+  #
   #         # Setup paths
   #         MODULAR_HOME=$HOME/.modular
   #         echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV

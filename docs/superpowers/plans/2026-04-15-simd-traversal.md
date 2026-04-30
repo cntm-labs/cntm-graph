@@ -73,7 +73,7 @@ impl GraphStore {
     pub fn find_best_weighted_simd(&self, target_type: u16) -> (usize, f32) {
         let type_slice = self.nodes.get_type_slice();
         let weight_slice = self.nodes.get_weight_slice();
-        
+
         let mut best_idx = 0;
         let mut best_score = -1.0;
 
@@ -85,10 +85,10 @@ impl GraphStore {
 
             let types = u16x16::from_slice(&type_slice[i..]);
             let weights = f32x16::from_slice(&weight_slice[i..]);
-            
+
             let mask = types.simd_eq(target_simd);
             let scores = mask.select(weights, zero_simd);
-            
+
             let max_score = scores.reduce_max();
             if max_score > best_score {
                 // Find index within block (Simplified for prototype)

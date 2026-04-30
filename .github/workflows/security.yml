@@ -8,7 +8,7 @@ on:
     - cron: '0 0 * * 1'
 
 jobs:
-  
+
   audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
@@ -20,7 +20,7 @@ jobs:
         run: cargo install cargo-audit
       - name: Run audit
         run: cargo audit
-  
+
   clippy-security:
     name: Static Analysis
     runs-on: ubuntu-latest
@@ -60,10 +60,10 @@ jobs:
   #       run: |
   #         curl -s https://get.modular.com | sh -
   #         sudo apt-get update && sudo apt-get install -y modular
-  #         
+  #
   #         modular auth ${{ secrets.MODULAR_AUTH_TOKEN }}
   #         modular install mojo
-  #         
+  #
   #         MODULAR_HOME=$HOME/.modular
   #         echo "MODULAR_HOME=$MODULAR_HOME" >> $GITHUB_ENV
   #         echo "$HOME/.modular/bin" >> $GITHUB_PATH

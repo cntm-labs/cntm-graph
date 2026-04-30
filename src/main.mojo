@@ -2,11 +2,11 @@ from std.ffi import external_call
 
 def main() raises:
     print("Mojo Reader: Starting Full E2E Verification with Linked C Helper...")
-    
+
     var path = "/home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/e2e_test_graph.bin"
     var node_cap = 1000
     var edge_cap = 1000
-    
+
     def align_64(val: Int) -> Int:
         return (val + 63) & ~63
 
@@ -23,7 +23,7 @@ def main() raises:
     var types_offset = align_64(tgt_offset + (edge_cap * 4))
     var edge_weights_offset = align_64(types_offset + (edge_cap * 2))
     var edges_size = align_64(edge_weights_offset + (edge_cap * 4))
-    
+
     var total_size = nodes_size + edges_size
 
     var ptr = external_call["map_graph", Int](path.unsafe_ptr(), total_size)
@@ -32,10 +32,10 @@ def main() raises:
         return
 
     print("Mojo Reader: [SUCCESS] Memory Mapped at", ptr)
-    
+
     var count = external_call["read_u64", UInt64](ptr, 0)
     print("Mojo Reader: Node Count =", count)
-    
+
     # Node 0: ID 100, Type 10, Weight 0.5
     var n0_id = external_call["read_u64", UInt64](ptr, ids_offset)
     var n0_type = external_call["read_u16", UInt16](ptr, type_ids_offset)
@@ -52,7 +52,7 @@ def main() raises:
     var edge_base = ptr + nodes_size
     var edge_count = external_call["read_u64", UInt64](edge_base, 0)
     print("Mojo Reader: Edge Count =", edge_count)
-    
+
     # Edge 1: Src 1 -> Tgt 2, Type 2, Weight 0.2 (Index 1)
     var e1_src = external_call["read_u32", UInt32](edge_base, src_offset + 4)
     var e1_tgt = external_call["read_u32", UInt32](edge_base, tgt_offset + 4)

@@ -15,7 +15,7 @@ Implement a high-performance, asynchronous metadata system ("Cold Path") using *
 ## 3. Data Layout
 
 ### 3.1 Hot/Cold Bridge
-Each node and edge in the Hot Path contains an `ext_offset` (u32). 
+Each node and edge in the Hot Path contains an `ext_offset` (u32).
 - `0`: No metadata associated.
 - `>0`: Byte offset from the start of the corresponding `.meta` file.
 

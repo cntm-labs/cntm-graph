@@ -10,3 +10,4 @@ version = "0.1.0"
 [dependencies]
 mojo = ">=1.0.0b1.dev2026042706,<2"
 flatbuffers = ">=25.12.19,<26"
+pre-commit = ">=4.6.0,<5"

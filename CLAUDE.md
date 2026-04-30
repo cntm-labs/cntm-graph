@@ -11,10 +11,10 @@ This file is the operational core. Claude Code MUST follow these protocols to ma
 1. **Research Sync:** When `./scripts/update_notebookLM.sh` is executed:
    - You MUST update `DESIGN_DECISIONS.md` with new graph optimization ADRs found in research.
    - **Constraint:** Maintain a rolling log of the **latest 10 ADRs**.
-2. **Logic Verification:** 
+2. **Logic Verification:**
    - All new graph mutations and engine kernel updates MUST pass Lean verification before commit.
    - Ensure `LEAN_PATH` is configured correctly for the CI environment.
-3. **Performance CI:** 
+3. **Performance CI:**
    - Every Pull Request MUST execute the `Zero-copy latency benchmark` via `cargo bench`.
    - Regressions > 5% in traversal speed must be flagged and reviewed by a Senior Architect.
 4. **PR Creation Protocol:** When instructed to create a Pull Request:

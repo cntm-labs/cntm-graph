@@ -12,7 +12,7 @@ pub mod metadata_generated;
 
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
-use std::io::{Result, Write};
+use std::io::Result;
 use std::ptr::NonNull;
 use std::simd::{Select, cmp::SimdPartialEq, f32x16, num::SimdFloat, u16x16};
 
@@ -34,9 +34,15 @@ impl MmapMetadataBuffer {
             // Initialize with 8 bytes for the offset tracker itself
             let initial_offset = 8;
             unsafe { *(mmap.as_mut_ptr() as *mut u64) = initial_offset as u64 };
-            Self { mmap, current_offset: initial_offset }
+            Self {
+                mmap,
+                current_offset: initial_offset,
+            }
         } else {
-            Self { mmap, current_offset }
+            Self {
+                mmap,
+                current_offset,
+            }
         }
     }
 
@@ -365,16 +371,23 @@ impl GraphStore {
     }
 
     /// Associates a binary payload (FlatBuffers) with a node.
-    pub fn set_node_metadata(&mut self, node_idx: usize, payload: &[u8]) -> std::result::Result<(), String> {
+    pub fn set_node_metadata(
+        &mut self,
+        node_idx: usize,
+        payload: &[u8],
+    ) -> std::result::Result<(), String> {
         if node_idx >= self.nodes.count {
             return Err("Invalid node index".to_string());
         }
 
         let offset = self.metadata.append(payload)?;
-        
+
         // SAFETY: `ext_offsets_ptr` is valid and `node_idx` is within bounds.
         unsafe {
-            self.nodes.ext_offsets_ptr.add(node_idx).write(offset as u32);
+            self.nodes
+                .ext_offsets_ptr
+                .add(node_idx)
+                .write(offset as u32);
         }
 
         Ok(())
@@ -388,8 +401,8 @@ impl GraphStore {
 
         // SAFETY: `ext_offsets_ptr` is valid and `node_idx` is within bounds.
         let offset = unsafe { *self.nodes.ext_offsets_ptr.add(node_idx) } as usize;
-        
-        if offset == 0 { 
+
+        if offset == 0 {
             return None;
         }
 
@@ -562,7 +575,9 @@ mod tests {
 
     #[test]
     fn test_flatbuffers_metadata() {
-        use crate::metadata::cntm_graph::{NodeMetadata, NodeMetadataArgs, Property, PropertyArgs, Value};
+        use crate::metadata::cntm_graph::{
+            NodeMetadata, NodeMetadataArgs, Property, PropertyArgs, Value,
+        };
         use flatbuffers::FlatBufferBuilder;
 
         let path = "test_metadata.bin";
@@ -577,19 +592,25 @@ mod tests {
         let name = fbb.create_string("AGI-Root");
         let key = fbb.create_string("confidence");
         let val_str = fbb.create_string("0.99");
-        
-        let p0 = Property::create(&mut fbb, &PropertyArgs {
-            key: Some(key),
-            value_type: Value::FloatValue,
-            value: Some(val_str.as_union_value()),
-        });
+
+        let p0 = Property::create(
+            &mut fbb,
+            &PropertyArgs {
+                key: Some(key),
+                value_type: Value::FloatValue,
+                value: Some(val_str.as_union_value()),
+            },
+        );
 
         let properties = fbb.create_vector(&[p0]);
 
-        let metadata_offset = NodeMetadata::create(&mut fbb, &NodeMetadataArgs {
-            name: Some(name),
-            properties: Some(properties),
-        });
+        let metadata_offset = NodeMetadata::create(
+            &mut fbb,
+            &NodeMetadataArgs {
+                name: Some(name),
+                properties: Some(properties),
+            },
+        );
         fbb.finish(metadata_offset, None);
         let payload = fbb.finished_data();
 

@@ -28,6 +28,9 @@ fn main() -> std::io::Result<()> {
     // Edge 1: Src 1 -> Tgt 2, Type 2, Weight 0.2
     store.edges.add_edge(1, 2, 2, 0.2);
 
-    println!("Rust Writer: Successfully wrote {} nodes and {} edges.", store.nodes.count, store.edges.count);
+    println!(
+        "Rust Writer: Successfully wrote {} nodes and {} edges.",
+        store.nodes.count, store.edges.count
+    );
     Ok(())
 }

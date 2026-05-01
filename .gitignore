@@ -22,6 +22,7 @@ shm_*.tmp
 *.swo
 
 # Project Specifics
+.worktrees/
 .superpowers/brainstorm/*/state/
 .superpowers/brainstorm/*/content/*.html
 !.superpowers/brainstorm/index.html

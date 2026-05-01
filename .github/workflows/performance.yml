@@ -20,7 +20,7 @@ jobs:
           key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run Benchmarks
-        run: cargo bench -- --output-format bencher
+        run: cargo bench
 
       - name: Analyze Results
         id: analyze

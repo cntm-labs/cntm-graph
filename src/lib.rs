@@ -14,7 +14,9 @@ use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::io::Result;
 use std::ptr::NonNull;
-use std::simd::{Select, cmp::SimdPartialEq, f32x16, num::SimdFloat, u16x16};
+use std::simd::{
+    Select, cmp::SimdPartialEq, cmp::SimdPartialOrd, f32x16, num::SimdFloat, u16x16, u32x16,
+};
 
 /// A buffer for storing arbitrary metadata payloads (e.g., FlatBuffers).
 /// It maps a separate region of memory and provides append-only access.
@@ -430,34 +432,75 @@ impl GraphStore {
         let mut best_score = -1.0;
 
         let target_simd = u16x16::splat(target_type);
-        let zero_simd = f32x16::splat(0.0);
 
         let count = self.nodes.count;
         let simd_end = (count / 16) * 16;
 
-        for i in (0..simd_end).step_by(16) {
+        // Level 2 Optimization: Use running best vectors to avoid frequent reductions
+        let mut running_best_scores = f32x16::splat(-1.0);
+        let mut running_best_indices = u32x16::splat(0);
+
+        // Pre-compute lane indices and increment
+        let mut lane_indices =
+            u32x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        let increment = u32x16::splat(16);
+
+        let simd_end_unrolled = (count / 64) * 64;
+        let mut i = 0;
+        while i < simd_end_unrolled {
+            // Process 4 blocks of 16 nodes (64 nodes total) to amortize loop overhead
+            for _ in 0..4 {
+                let types = u16x16::from_slice(&type_slice[i..i + 16]);
+                let mask = types.simd_eq(target_simd);
+
+                if mask.any() {
+                    let weights = f32x16::from_slice(&weight_slice[i..i + 16]);
+                    let better_weight_mask = weights.simd_gt(running_best_scores);
+                    let update_mask = mask & better_weight_mask.cast();
+
+                    if update_mask.any() {
+                        running_best_scores = update_mask.select(weights, running_best_scores);
+                        running_best_indices =
+                            update_mask.select(lane_indices, running_best_indices);
+                    }
+                }
+                lane_indices += increment;
+                i += 16;
+            }
+        }
+
+        // Process remaining blocks between simd_end_unrolled and simd_end
+        while i < simd_end {
             let types = u16x16::from_slice(&type_slice[i..i + 16]);
             let mask = types.simd_eq(target_simd);
 
-            // Optimization: Only process further if there's at least one match in this block
             if mask.any() {
                 let weights = f32x16::from_slice(&weight_slice[i..i + 16]);
-                let scores = mask.select(weights, zero_simd);
-                let max_score = scores.reduce_max();
+                let better_weight_mask = weights.simd_gt(running_best_scores);
+                let update_mask = mask & better_weight_mask.cast();
 
-                if max_score > best_score {
-                    // Find index within block
-                    for j in 0..16 {
-                        if mask.test(j) && scores[j] == max_score {
-                            best_score = max_score;
-                            best_idx = i + j;
-                        }
-                    }
+                if update_mask.any() {
+                    running_best_scores = update_mask.select(weights, running_best_scores);
+                    running_best_indices = update_mask.select(lane_indices, running_best_indices);
+                }
+            }
+            lane_indices += increment;
+            i += 16;
+        }
+
+        // Final reduction: Only call reduce_max ONCE after the main loop
+        let final_max_score = running_best_scores.reduce_max();
+        if final_max_score > -1.0 {
+            for j in 0..16 {
+                if running_best_scores[j] == final_max_score {
+                    best_score = final_max_score;
+                    best_idx = running_best_indices[j] as usize;
+                    break; // Pick the first occurrence
                 }
             }
         }
 
-        // Scalar fallback for remainder
+        // Scalar fallback for remainder (unchanged)
         for i in simd_end..count {
             if type_slice[i] == target_type && weight_slice[i] > best_score {
                 best_score = weight_slice[i];

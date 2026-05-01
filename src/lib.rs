@@ -437,18 +437,21 @@ impl GraphStore {
 
         for i in (0..simd_end).step_by(16) {
             let types = u16x16::from_slice(&type_slice[i..i + 16]);
-            let weights = f32x16::from_slice(&weight_slice[i..i + 16]);
-
             let mask = types.simd_eq(target_simd);
-            let scores = mask.select(weights, zero_simd);
 
-            let max_score = scores.reduce_max();
-            if max_score > best_score {
-                // Find index within block
-                for j in 0..16 {
-                    if scores[j] == max_score {
-                        best_score = max_score;
-                        best_idx = i + j;
+            // Optimization: Only process further if there's at least one match in this block
+            if mask.any() {
+                let weights = f32x16::from_slice(&weight_slice[i..i + 16]);
+                let scores = mask.select(weights, zero_simd);
+                let max_score = scores.reduce_max();
+
+                if max_score > best_score {
+                    // Find index within block
+                    for j in 0..16 {
+                        if mask.test(j) && scores[j] == max_score {
+                            best_score = max_score;
+                            best_idx = i + j;
+                        }
                     }
                 }
             }

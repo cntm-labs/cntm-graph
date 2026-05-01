@@ -1,0 +1,38 @@
+name: Performance Benchmarking
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust (Nightly)
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Benchmarks
+        run: cargo bench -- --output-format bencher
+
+      - name: Analyze Results
+        id: analyze
+        run: |
+          REPORT=$(python3 scripts/analyze_bench.py)
+          # Escape newlines and other special chars for GitHub output
+          REPORT="${REPORT//'%'/'%25'}"
+          REPORT="${REPORT//$'\n'/'%0A'}"
+          REPORT="${REPORT//$'\r'/'%0D'}"
+          echo "report=$REPORT" >> $GITHUB_OUTPUT
+
+      - name: Post PR Comment
+        uses: mshick/add-pr-comment@v2
+        with:
+          message: ${{ steps.analyze.outputs.report }}

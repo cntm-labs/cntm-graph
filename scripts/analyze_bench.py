@@ -9,8 +9,12 @@ def get_mean(path):
 
 def main():
     results = {}
-    # Criterion saves results in target/criterion/{name}/new/estimates.json
-    paths = glob.glob("target/criterion/*/new/estimates.json")
+    # Criterion saves results in target/criterion/{group}/{name}/new/estimates.json
+    paths = glob.glob("target/criterion/*/*/new/estimates.json")
+
+    if not paths:
+        # Try one level shallower just in case
+        paths = glob.glob("target/criterion/*/new/estimates.json")
 
     if not paths:
         print("No benchmark results found. Run 'cargo bench' first.")
@@ -22,7 +26,6 @@ def main():
         if len(parts) >= 4:
             name = parts[-3]
             results[name] = get_mean(p)
-
     # Process matches
     output = "### 🚀 Performance Report (SIMD vs Scalar)\n\n"
     output += "| Workload | Scalar Time | SIMD Time | **Speedup** |\n"

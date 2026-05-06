@@ -222,6 +222,8 @@ pub struct MmapNodeTable {
     pub timestamps_ptr: *mut u64,
     /// Pointer to the array of extension offsets (u32).
     pub ext_offsets_ptr: *mut u32,
+    /// Pointer to the dirty bitmask (u64 words, each covering 64 nodes).
+    pub dirty_mask_ptr: *mut u64,
 }
 
 impl MmapNodeTable {
@@ -243,6 +245,7 @@ impl MmapNodeTable {
             let weights_offset = align_to_64(states_offset + capacity);
             let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
             let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
+            let dirty_mask_offset = align_to_64(ext_offsets_offset + (capacity * 4));
 
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
@@ -254,6 +257,7 @@ impl MmapNodeTable {
                 weights_ptr: base_ptr.add(weights_offset) as *mut f32,
                 timestamps_ptr: base_ptr.add(timestamps_offset) as *mut u64,
                 ext_offsets_ptr: base_ptr.add(ext_offsets_offset) as *mut u32,
+                dirty_mask_ptr: base_ptr.add(dirty_mask_offset) as *mut u64,
             }
         }
     }
@@ -270,6 +274,16 @@ impl MmapNodeTable {
     pub fn get_weight_slice(&self) -> &[f32] {
         // SAFETY: Same as `get_type_slice`, the pointer is valid for `count` elements.
         unsafe { std::slice::from_raw_parts(self.weights_ptr, self.count) }
+    }
+
+    /// Marks a node as dirty in the bitmask.
+    pub fn mark_dirty(&mut self, idx: usize) {
+        let word_idx = idx / 64;
+        let bit_idx = idx % 64;
+        unsafe {
+            let word_ptr = self.dirty_mask_ptr.add(word_idx);
+            *word_ptr |= 1 << bit_idx;
+        }
     }
 
     /// Adds a new node to the table and returns its index.
@@ -297,6 +311,7 @@ impl MmapNodeTable {
             // Persist count to the beginning of the mmap region
             *(self.ptr.as_ptr() as *mut u64) = self.count as u64;
         }
+        self.mark_dirty(idx);
         idx
     }
 
@@ -308,7 +323,10 @@ impl MmapNodeTable {
         let weights_offset = align_to_64(states_offset + capacity);
         let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
         let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
-        align_to_64(ext_offsets_offset + (capacity * 4))
+        let dirty_mask_offset = align_to_64(ext_offsets_offset + (capacity * 4));
+        // Each u64 covers 64 nodes.
+        let bitmask_words = capacity.div_ceil(64);
+        align_to_64(dirty_mask_offset + (bitmask_words * 8))
     }
 }
 
@@ -490,6 +508,8 @@ impl GraphStore {
                 .add(node_idx)
                 .write(offset as u32);
         }
+
+        self.nodes.mark_dirty(node_idx);
 
         Ok(())
     }
@@ -752,6 +772,45 @@ mod tests {
         }
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_dirty_bitmask() {
+        let _ = std::fs::remove_file("test_dirty_mask.bin");
+        let capacity = 128; // 2 words (u64)
+        let size = MmapNodeTable::calculate_mmap_size(capacity);
+        let mut mmap = init_shared_memory("test_dirty_mask.bin", size).unwrap();
+
+        let mut table = unsafe { MmapNodeTable::new_from_ptr(mmap.as_mut_ptr(), capacity) };
+
+        // Initially zero
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr, 0);
+            assert_eq!(*table.dirty_mask_ptr.add(1), 0);
+        }
+
+        table.add_node(1, 1, 0.5); // idx 0
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr, 1);
+        }
+
+        table.add_node(2, 1, 0.5); // idx 1
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr, 3);
+        }
+
+        // Test bit 64 (start of second word)
+        for i in 2..64 {
+            table.add_node(i + 1, 1, 0.5);
+        }
+        assert_eq!(table.count, 64);
+
+        table.add_node(65, 1, 0.5); // idx 64
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr.add(1), 1);
+        }
+
+        let _ = std::fs::remove_file("test_dirty_mask.bin");
     }
 
     #[test]

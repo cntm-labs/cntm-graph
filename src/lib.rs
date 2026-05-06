@@ -106,6 +106,84 @@ pub struct AlignedWeightBlock {
     pub values: [f32; 16],
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub enum GraphEvent {
+    NodeAdded { id: u64, type_id: u16 },
+    EdgeAdded { src: u32, tgt: u32 },
+    MetadataUpdated { node_idx: u32 },
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct EventPacket {
+    pub timestamp: u64,
+    pub event: GraphEvent,
+}
+
+/// A zero-copy circular ring buffer in Shared Memory to record graph structural events.
+pub struct MmapDeltaLog {
+    /// The underlying memory mapping.
+    pub mmap: MmapMut,
+    /// Pointer to the head of the ring buffer (u64).
+    pub head_ptr: *mut u64,
+    /// Pointer to the tail of the ring buffer (u64).
+    pub tail_ptr: *mut u64,
+    /// Pointer to the base of the data region.
+    pub data_ptr: *mut EventPacket,
+    /// Maximum number of packets the buffer can hold.
+    pub capacity: usize,
+}
+
+impl MmapDeltaLog {
+    /// Creates a new `MmapDeltaLog` from an existing `MmapMut`.
+    pub fn new(mut mmap: MmapMut) -> Self {
+        let base_ptr = mmap.as_mut_ptr();
+        // The first 16 bytes store head (8 bytes) and tail (8 bytes)
+        let head_ptr = base_ptr as *mut u64;
+        let tail_ptr = unsafe { base_ptr.add(8) as *mut u64 };
+        let data_start = align_to_64(16);
+        let data_ptr = unsafe { base_ptr.add(data_start) as *mut EventPacket };
+
+        let remaining_size = mmap.len() - data_start;
+        let capacity = remaining_size / std::mem::size_of::<EventPacket>();
+
+        Self {
+            mmap,
+            head_ptr,
+            tail_ptr,
+            data_ptr,
+            capacity,
+        }
+    }
+
+    /// Pushes a new event into the circular buffer.
+    pub fn push(&mut self, event: GraphEvent) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+
+        let packet = EventPacket { timestamp, event };
+
+        unsafe {
+            let tail = *self.tail_ptr;
+            let next_tail = (tail + 1) % self.capacity as u64;
+
+            // Write packet at current tail
+            self.data_ptr.add(tail as usize).write(packet);
+
+            // Update tail
+            *self.tail_ptr = next_tail;
+
+            // If tail catches up to head, advance head (overwrite oldest)
+            if next_tail == *self.head_ptr {
+                *self.head_ptr = (*self.head_ptr + 1) % self.capacity as u64;
+            }
+        }
+    }
+}
+
 impl AlignedWeightBlock {
     /// Creates a new `AlignedWeightBlock` initialized to zeros.
     pub fn new() -> Self {
@@ -145,6 +223,8 @@ pub struct MmapNodeTable {
     pub timestamps_ptr: *mut u64,
     /// Pointer to the array of extension offsets (u32).
     pub ext_offsets_ptr: *mut u32,
+    /// Pointer to the dirty bitmask (u64 words, each covering 64 nodes).
+    pub dirty_mask_ptr: *mut u64,
 }
 
 impl MmapNodeTable {
@@ -166,6 +246,7 @@ impl MmapNodeTable {
             let weights_offset = align_to_64(states_offset + capacity);
             let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
             let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
+            let dirty_mask_offset = align_to_64(ext_offsets_offset + (capacity * 4));
 
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
@@ -177,6 +258,7 @@ impl MmapNodeTable {
                 weights_ptr: base_ptr.add(weights_offset) as *mut f32,
                 timestamps_ptr: base_ptr.add(timestamps_offset) as *mut u64,
                 ext_offsets_ptr: base_ptr.add(ext_offsets_offset) as *mut u32,
+                dirty_mask_ptr: base_ptr.add(dirty_mask_offset) as *mut u64,
             }
         }
     }
@@ -193,6 +275,16 @@ impl MmapNodeTable {
     pub fn get_weight_slice(&self) -> &[f32] {
         // SAFETY: Same as `get_type_slice`, the pointer is valid for `count` elements.
         unsafe { std::slice::from_raw_parts(self.weights_ptr, self.count) }
+    }
+
+    /// Marks a node as dirty in the bitmask.
+    pub fn mark_dirty(&mut self, idx: usize) {
+        let word_idx = idx / 64;
+        let bit_idx = idx % 64;
+        unsafe {
+            let word_ptr = self.dirty_mask_ptr.add(word_idx);
+            *word_ptr |= 1 << bit_idx;
+        }
     }
 
     /// Adds a new node to the table and returns its index.
@@ -220,6 +312,7 @@ impl MmapNodeTable {
             // Persist count to the beginning of the mmap region
             *(self.ptr.as_ptr() as *mut u64) = self.count as u64;
         }
+        self.mark_dirty(idx);
         idx
     }
 
@@ -231,7 +324,10 @@ impl MmapNodeTable {
         let weights_offset = align_to_64(states_offset + capacity);
         let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
         let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
-        align_to_64(ext_offsets_offset + (capacity * 4))
+        let dirty_mask_offset = align_to_64(ext_offsets_offset + (capacity * 4));
+        // Each u64 covers 64 nodes.
+        let bitmask_words = capacity.div_ceil(64);
+        align_to_64(dirty_mask_offset + (bitmask_words * 8))
     }
 }
 
@@ -332,6 +428,8 @@ pub struct GraphStore {
     pub edges: MmapEdgeTable,
     /// The memory-mapped metadata buffer.
     pub metadata: MmapMetadataBuffer,
+    /// The memory-mapped delta log for structural events.
+    pub delta_log: MmapDeltaLog,
     /// The underlying memory mapping that owns the shared memory region for nodes/edges.
     _mmap: MmapMut,
 }
@@ -348,6 +446,7 @@ impl GraphStore {
         let edges_size = MmapEdgeTable::calculate_mmap_size(edge_cap);
         let total_size = nodes_size + edges_size;
 
+        let file_existed = std::path::Path::new(path).exists();
         let mut mmap = init_shared_memory(path, total_size)?;
         let base_ptr = mmap.as_mut_ptr();
 
@@ -356,9 +455,20 @@ impl GraphStore {
         let metadata_mmap = init_shared_memory(&metadata_path, 10 * 1024 * 1024)?; // 10MB default
         let metadata = MmapMetadataBuffer::new(metadata_mmap);
 
+        // Delta log for structural events
+        let delta_log_path = format!("{}.delta", path);
+        let delta_log_mmap = init_shared_memory(&delta_log_path, 1024 * 1024)?; // 1MB default
+        let delta_log = MmapDeltaLog::new(delta_log_mmap);
+
         // SAFETY: We have allocated enough space via `init_shared_memory` for both tables.
         // `nodes_size` ensures that `edges` starts at a valid, aligned boundary.
         let (nodes, edges) = unsafe {
+            // If file is new, initialize count to 0. If it existed, keep existing data.
+            if !file_existed {
+                *(base_ptr as *mut u64) = 0;
+                *(base_ptr.add(nodes_size) as *mut u64) = 0;
+            }
+
             let nodes = MmapNodeTable::new_from_ptr(base_ptr, node_cap);
             let edges = MmapEdgeTable::new_from_ptr(base_ptr.add(nodes_size), edge_cap);
             (nodes, edges)
@@ -368,8 +478,23 @@ impl GraphStore {
             nodes,
             edges,
             metadata,
+            delta_log,
             _mmap: mmap,
         })
+    }
+
+    /// Adds a new node to the graph.
+    pub fn add_node(&mut self, id: u64, type_id: u16, weight: f32) -> usize {
+        let idx = self.nodes.add_node(id, type_id, weight);
+        self.delta_log.push(GraphEvent::NodeAdded { id, type_id });
+        idx
+    }
+
+    /// Adds a new edge to the graph.
+    pub fn add_edge(&mut self, src: u32, tgt: u32, edge_type: u16, weight: f32) -> usize {
+        let idx = self.edges.add_edge(src, tgt, edge_type, weight);
+        self.delta_log.push(GraphEvent::EdgeAdded { src, tgt });
+        idx
     }
 
     /// Associates a binary payload (FlatBuffers) with a node.
@@ -391,6 +516,11 @@ impl GraphStore {
                 .add(node_idx)
                 .write(offset as u32);
         }
+
+        self.nodes.mark_dirty(node_idx);
+        self.delta_log.push(GraphEvent::MetadataUpdated {
+            node_idx: node_idx as u32,
+        });
 
         Ok(())
     }
@@ -595,15 +725,22 @@ mod tests {
     fn test_graph_store_persistence() {
         let path = "test_store.bin";
         let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.delta", path));
         let node_cap = 10;
         let edge_cap = 10;
 
         {
             let mut store = GraphStore::new(path, node_cap, edge_cap).unwrap();
-            store.nodes.add_node(1, 1, 0.5);
-            store.edges.add_edge(0, 1, 1, 0.1);
+            store.add_node(1, 1, 0.5);
+            store.add_edge(0, 1, 1, 0.1);
             assert_eq!(store.nodes.count, 1);
             assert_eq!(store.edges.count, 1);
+
+            // Verify delta log
+            unsafe {
+                assert_eq!(*store.delta_log.head_ptr, 0);
+                assert_eq!(*store.delta_log.tail_ptr, 2);
+            }
         }
 
         {
@@ -614,9 +751,77 @@ mod tests {
             unsafe {
                 assert_eq!(*store.nodes.ids_ptr, 1);
                 assert_eq!(*store.edges.weights_ptr, 0.1);
+                assert_eq!(*store.delta_log.head_ptr, 0);
+                assert_eq!(*store.delta_log.tail_ptr, 2);
             }
         }
         let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+    }
+
+    #[test]
+    fn test_circular_delta_log() {
+        let path = "test_delta.bin";
+        let _ = std::fs::remove_file(path);
+        let mmap = init_shared_memory(path, 1024).unwrap();
+        let mut log = MmapDeltaLog::new(mmap);
+
+        let cap = log.capacity;
+
+        for i in 0..cap + 5 {
+            log.push(GraphEvent::NodeAdded {
+                id: i as u64,
+                type_id: 1,
+            });
+        }
+
+        unsafe {
+            // After cap + 5 pushes, tail should be at 5
+            assert_eq!(*log.tail_ptr, 5);
+            // And head should have advanced 6 times (from 0 to 6)
+            assert_eq!(*log.head_ptr, 6);
+        }
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_dirty_bitmask() {
+        let _ = std::fs::remove_file("test_dirty_mask.bin");
+        let capacity = 128; // 2 words (u64)
+        let size = MmapNodeTable::calculate_mmap_size(capacity);
+        let mut mmap = init_shared_memory("test_dirty_mask.bin", size).unwrap();
+
+        let mut table = unsafe { MmapNodeTable::new_from_ptr(mmap.as_mut_ptr(), capacity) };
+
+        // Initially zero
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr, 0);
+            assert_eq!(*table.dirty_mask_ptr.add(1), 0);
+        }
+
+        table.add_node(1, 1, 0.5); // idx 0
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr, 1);
+        }
+
+        table.add_node(2, 1, 0.5); // idx 1
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr, 3);
+        }
+
+        // Test bit 64 (start of second word)
+        for i in 2..64 {
+            table.add_node(i + 1, 1, 0.5);
+        }
+        assert_eq!(table.count, 64);
+
+        table.add_node(65, 1, 0.5); // idx 64
+        unsafe {
+            assert_eq!(*table.dirty_mask_ptr.add(1), 1);
+        }
+
+        let _ = std::fs::remove_file("test_dirty_mask.bin");
     }
 
     #[test]
@@ -629,9 +834,10 @@ mod tests {
         let path = "test_metadata.bin";
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
 
         let mut store = GraphStore::new(path, 10, 10).unwrap();
-        store.nodes.add_node(1, 1, 0.5);
+        store.add_node(1, 1, 0.5);
 
         // Build FlatBuffers metadata
         let mut fbb = FlatBufferBuilder::new();
@@ -663,6 +869,19 @@ mod tests {
         // Store metadata
         store.set_node_metadata(0, payload).unwrap();
 
+        // Verify delta log for MetadataUpdated event
+        unsafe {
+            // Index 0 was NodeAdded, Index 1 is MetadataUpdated
+            assert_eq!(*store.delta_log.tail_ptr, 2);
+            let packet = *store.delta_log.data_ptr.add(1);
+            match packet.event {
+                GraphEvent::MetadataUpdated { node_idx } => {
+                    assert_eq!(node_idx, 0);
+                }
+                _ => panic!("Expected MetadataUpdated event"),
+            }
+        }
+
         // Retrieve and verify
         let retrieved_payload = store.get_node_metadata(0).unwrap();
         let metadata = flatbuffers::root::<NodeMetadata>(retrieved_payload).unwrap();
@@ -670,5 +889,44 @@ mod tests {
 
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.meta", path));
+    }
+
+    #[test]
+    fn test_isotime_handshake() {
+        let path = "test_handshake.bin";
+        let delta_path = format!("{}.delta", path);
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(&delta_path);
+
+        {
+            let mut store = GraphStore::new(path, 10, 10).unwrap();
+            store.add_node(101, 1, 0.9);
+            store.add_node(102, 1, 0.8);
+            store.add_node(103, 2, 0.7);
+
+            assert_eq!(store.nodes.count, 3);
+
+            // Directly check delta log
+            unsafe {
+                assert_eq!(*store.delta_log.head_ptr, 0);
+                assert_eq!(*store.delta_log.tail_ptr, 3);
+
+                // Verify the 3 NodeAdded events
+                for i in 0..3 {
+                    let packet = *store.delta_log.data_ptr.add(i);
+                    match packet.event {
+                        GraphEvent::NodeAdded { id, .. } => {
+                            assert_eq!(id, (101 + i) as u64);
+                        }
+                        _ => panic!("Expected NodeAdded event"),
+                    }
+                }
+            }
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(&delta_path);
     }
 }

@@ -1,0 +1,31 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["72494dbab2baf23c.olean"],
+  "i": "4080985af603bf25.ilean",
+  "c": "07fdda846b816d77.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/lib/lean /home/mrbt/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean /home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/Main.lean -o /home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/lib/lean/Main.olean -i /home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/lib/lean/Main.ilean -c /home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/ir/Main.c --setup /home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/ir/Main.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["Main:deps",
+   [["deps",
+     [["verification/verification:extraDep",
+       [["@verification:extraDep", "00000000000006bb"]]],
+      ["imports", "00000000000006bb"]]],
+    ["libs",
+     [["import dynlibs", "00000000000006bb"],
+      ["package external libraries", "00000000000006bb"],
+      ["module dynlibs", "00000000000006bb"],
+      ["module plugins", "00000000000006bb"]]]]],
+  ["Lean 4.29.1, commit f72c35b3f637c8c6571d353742168ab66cc22c00",
+   "fa77a35a41db35c0"],
+  ["/home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/Main.lean",
+   "b017a2f2f5c52ee5"],
+  ["options", "00000000000006bb"],
+  ["isModule: false", "feefd2a0d3a1847e"],
+  ["Module.name: Main", "f2a1fd945cf30c62"],
+  ["Package.id?: (some verification)", "3762dea3ba682a2c"],
+  ["Module.leanArgs: #[]", "00000000000006bb"]],
+ "depHash": "7989ce8ed73eaa04"}

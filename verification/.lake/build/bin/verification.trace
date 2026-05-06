@@ -1,0 +1,17 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs": "5616201aa27e0401",
+ "log":
+ [{"message":
+   ".> /home/mrbt/.elan/toolchains/leanprover--lean4---v4.29.1/bin/clang -o /home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/bin/verification /home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/ir/Main.c.o.export -L /home/mrbt/.elan/toolchains/leanprover--lean4---v4.29.1/lib/lean --sysroot /home/mrbt/.elan/toolchains/leanprover--lean4---v4.29.1 -L /home/mrbt/.elan/toolchains/leanprover--lean4---v4.29.1/lib -L /home/mrbt/.elan/toolchains/leanprover--lean4---v4.29.1/lib/glibc -lc -lc_nonshared -Wl,--as-needed -l:ld.so -Wl,--no-as-needed -lpthread_nonshared -Wl,--as-needed -Wl,-Bstatic -lgmp -lunwind -luv -Wl,-Bdynamic -Wl,--no-as-needed -fuse-ld=lld -Wl,--start-group -lleancpp -lLean -Wl,--end-group -lStd -Wl,--start-group -lInit -lleanrt -Wl,--end-group -Wl,-Bstatic -lc++ -lc++abi -Wl,-Bdynamic -lLake -Wl,--as-needed -lgmp -luv -lpthread -ldl -lrt -Wl,--no-as-needed -Wl,--gc-sections -lm -ldl -pthread",
+   "level": "trace"}],
+ "inputs":
+ [["linkObjs",
+   [["/home/mrbt/Desktop/workspaces/mlops/repositories/cntm-graph/verification/.lake/build/ir/Main.c.o.export",
+     "06fc2abca6de8ae5"]]],
+  ["linkLibs", "00000000000006bb"],
+  ["Lean 4.29.1, commit f72c35b3f637c8c6571d353742168ab66cc22c00",
+   "fa77a35a41db35c0"],
+  ["traceArgs: #[]", "00000000000006bb"],
+  ["x86_64-unknown-linux-gnu", "53a0e8937c307c28"]],
+ "depHash": "f231a9503652f370"}

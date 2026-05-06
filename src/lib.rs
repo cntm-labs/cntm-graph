@@ -446,6 +446,7 @@ impl GraphStore {
         let edges_size = MmapEdgeTable::calculate_mmap_size(edge_cap);
         let total_size = nodes_size + edges_size;
 
+        let file_existed = std::path::Path::new(path).exists();
         let mut mmap = init_shared_memory(path, total_size)?;
         let base_ptr = mmap.as_mut_ptr();
 
@@ -462,6 +463,12 @@ impl GraphStore {
         // SAFETY: We have allocated enough space via `init_shared_memory` for both tables.
         // `nodes_size` ensures that `edges` starts at a valid, aligned boundary.
         let (nodes, edges) = unsafe {
+            // If file is new, initialize count to 0. If it existed, keep existing data.
+            if !file_existed {
+                *(base_ptr as *mut u64) = 0;
+                *(base_ptr.add(nodes_size) as *mut u64) = 0;
+            }
+
             let nodes = MmapNodeTable::new_from_ptr(base_ptr, node_cap);
             let edges = MmapEdgeTable::new_from_ptr(base_ptr.add(nodes_size), edge_cap);
             (nodes, edges)
@@ -827,9 +834,10 @@ mod tests {
         let path = "test_metadata.bin";
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
 
         let mut store = GraphStore::new(path, 10, 10).unwrap();
-        store.nodes.add_node(1, 1, 0.5);
+        store.add_node(1, 1, 0.5);
 
         // Build FlatBuffers metadata
         let mut fbb = FlatBufferBuilder::new();

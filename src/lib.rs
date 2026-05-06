@@ -111,6 +111,7 @@ pub struct AlignedWeightBlock {
 pub enum GraphEvent {
     NodeAdded { id: u64, type_id: u16 },
     EdgeAdded { src: u32, tgt: u32 },
+    MetadataUpdated { node_idx: u32 },
 }
 
 #[repr(C)]
@@ -510,6 +511,9 @@ impl GraphStore {
         }
 
         self.nodes.mark_dirty(node_idx);
+        self.delta_log.push(GraphEvent::MetadataUpdated {
+            node_idx: node_idx as u32,
+        });
 
         Ok(())
     }
@@ -857,6 +861,19 @@ mod tests {
         // Store metadata
         store.set_node_metadata(0, payload).unwrap();
 
+        // Verify delta log for MetadataUpdated event
+        unsafe {
+            // Index 0 was NodeAdded, Index 1 is MetadataUpdated
+            assert_eq!(*store.delta_log.tail_ptr, 2);
+            let packet = *store.delta_log.data_ptr.add(1);
+            match packet.event {
+                GraphEvent::MetadataUpdated { node_idx } => {
+                    assert_eq!(node_idx, 0);
+                }
+                _ => panic!("Expected MetadataUpdated event"),
+            }
+        }
+
         // Retrieve and verify
         let retrieved_payload = store.get_node_metadata(0).unwrap();
         let metadata = flatbuffers::root::<NodeMetadata>(retrieved_payload).unwrap();
@@ -864,5 +881,44 @@ mod tests {
 
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.meta", path));
+    }
+
+    #[test]
+    fn test_isotime_handshake() {
+        let path = "test_handshake.bin";
+        let delta_path = format!("{}.delta", path);
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(&delta_path);
+
+        {
+            let mut store = GraphStore::new(path, 10, 10).unwrap();
+            store.add_node(101, 1, 0.9);
+            store.add_node(102, 1, 0.8);
+            store.add_node(103, 2, 0.7);
+
+            assert_eq!(store.nodes.count, 3);
+
+            // Directly check delta log
+            unsafe {
+                assert_eq!(*store.delta_log.head_ptr, 0);
+                assert_eq!(*store.delta_log.tail_ptr, 3);
+
+                // Verify the 3 NodeAdded events
+                for i in 0..3 {
+                    let packet = *store.delta_log.data_ptr.add(i);
+                    match packet.event {
+                        GraphEvent::NodeAdded { id, .. } => {
+                            assert_eq!(id, (101 + i) as u64);
+                        }
+                        _ => panic!("Expected NodeAdded event"),
+                    }
+                }
+            }
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(&delta_path);
     }
 }

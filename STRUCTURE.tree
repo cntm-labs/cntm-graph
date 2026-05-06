@@ -40,7 +40,6 @@
 │           └── 2026-04-15-mmap-refactor-tasks.md
 ├── examples
 │   └── verify_offsets.rs
-├── full_mojo_log.txt
 ├── locales
 │   ├── README.ja.md
 │   ├── README.th.md
@@ -52,9 +51,12 @@
 │   ├── metadata.fbs
 │   ├── metadata.rs
 │   └── metadata_generated.rs
-├── test_simd.bin.edges.meta
-├── test_simd.bin.nodes.meta
-├── test_store.bin.edges.meta
-└── test_store.bin.nodes.meta
+└── verification
+    ├── Main.lean
+    ├── Memory.lean
+    ├── lake-manifest.json
+    ├── lakefile.toml
+    ├── lean-toolchain
+    └── verification.lean
 
-10 directories, 48 files
+11 directories, 53 files

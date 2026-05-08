@@ -1,4 +1,5 @@
 use cntm_graph::GraphStore;
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 use std::time::Instant;
 
 fn main() -> std::io::Result<()> {
@@ -29,5 +30,32 @@ fn main() -> std::io::Result<()> {
         }
     }
     println!("✅ Fill completed in {:?}", fill_start.elapsed());
+
+    println!("🔍 Starting Random Access Probe (1M samples)...");
+    let mut rng = SmallRng::from_entropy();
+    let probe_count = 1_000_000;
+    let mut latencies = Vec::with_capacity(probe_count);
+
+    for _ in 0..probe_count {
+        let idx = rng.gen_range(0..node_count);
+        let sample_start = Instant::now();
+
+        // Access Node Data (Hot Path via raw pointers)
+        let _id = unsafe { *store.nodes.ids_ptr.add(idx) };
+        let _weight = unsafe { *store.nodes.weights_ptr.add(idx) };
+
+        latencies.push(sample_start.elapsed().as_nanos());
+    }
+
+    latencies.sort_unstable();
+    let p50 = latencies[probe_count / 2];
+    let p99 = latencies[(probe_count as f32 * 0.99) as usize];
+    let mean: u128 = latencies.iter().sum::<u128>() / probe_count as u128;
+
+    println!("📊 Results:");
+    println!("   - Mean Latency: {} ns", mean);
+    println!("   - P50 Latency:  {} ns", p50);
+    println!("   - P99 Latency:  {} ns", p99);
+
     Ok(())
 }

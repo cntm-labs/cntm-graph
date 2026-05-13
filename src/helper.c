@@ -45,3 +45,9 @@ unsigned int read_u32(void* ptr, size_t offset) {
     if (!ptr) return 0;
     return *(unsigned int*)((char*)ptr + offset);
 }
+
+int verify_canary(void* ptr, size_t offset) {
+    if (!ptr) return 0;
+    unsigned long long value = *(unsigned long long*)((char*)ptr + offset);
+    return value == 0xDEADBEEFCAFEBABEULL ? 1 : 0;
+}

@@ -3,6 +3,8 @@
 def align_to_64 (n : Nat) : Nat :=
   ((n + 63) / 64) * 64
 
+def GUARD_SIZE : Nat := 64
+
 -- Define a theorem to prove result is always a multiple of 64
 theorem aligned_is_multiple_of_64 (n : Nat) :
   ∃ k, align_to_64 n = 64 * k := by
@@ -13,9 +15,20 @@ theorem aligned_is_multiple_of_64 (n : Nat) :
 structure Segment where
   start : Nat
   len : Nat
+  element_size : Nat
+
+def Segment.in_bounds (s : Segment) (idx : Nat) : Prop :=
+  idx * s.element_size < s.len
+
+def Segment.addr (s : Segment) (idx : Nat) : Nat :=
+  s.start + idx * s.element_size
 
 def non_overlapping (s1 s2 : Segment) : Prop :=
   s1.start + s1.len <= s2.start ∨ s2.start + s2.len <= s1.start
+
+-- A Guard is just a special segment
+def is_guard (s : Segment) : Prop :=
+  s.len = GUARD_SIZE
 
 -- Theorem to prove: align_to_64 n >= n
 theorem align_to_64_ge (n : Nat) : align_to_64 n >= n := by

@@ -6,6 +6,7 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
+web = "cd explorer && npm run dev"
 
 [dependencies]
 mojo = ">=1.0.0b1.dev2026042706,<2"

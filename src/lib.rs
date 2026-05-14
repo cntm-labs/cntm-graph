@@ -18,6 +18,11 @@ use std::simd::{
     Select, cmp::SimdPartialEq, cmp::SimdPartialOrd, f32x16, num::SimdFloat, u16x16, u32x16,
 };
 
+/// Canary token used for guard segments to detect memory corruption.
+pub const CANARY_PATTERN: u64 = 0xDEADBEEFCAFEBABE;
+/// Size of the guard segment in bytes.
+pub const GUARD_SIZE: usize = 64;
+
 /// A buffer for storing arbitrary metadata payloads (e.g., FlatBuffers).
 /// It maps a separate region of memory and provides append-only access.
 pub struct MmapMetadataBuffer {
@@ -202,7 +207,8 @@ pub fn align_to_64(offset: usize) -> usize {
 /// A Data-Oriented Design (DOD) table for nodes stored in memory-mapped files.
 ///
 /// All fields are stored in contiguous arrays to maximize cache locality and
-/// enable efficient SIMD operations. The layout is 64-byte aligned.
+/// enable efficient SIMD operations. The layout is 64-byte aligned and protected
+/// by canary guard segments.
 #[derive(Debug)]
 pub struct MmapNodeTable {
     /// Pointer to the base of the node table memory region.
@@ -237,16 +243,21 @@ impl MmapNodeTable {
     /// * The first 8 bytes of `base_ptr` must contain the current node count as a u64.
     pub unsafe fn new_from_ptr(base_ptr: *mut u8, capacity: usize) -> Self {
         // SAFETY: We calculate offsets based on 64-byte alignment to ensure zero-copy compatibility
-        // with SIMD architectures. The caller must ensure `base_ptr` is correctly aligned.
+        // with SIMD architectures. Guard segments are inserted between arrays.
         unsafe {
             let count = *(base_ptr as *mut u64) as usize;
             let ids_offset = align_to_64(8);
-            let type_ids_offset = align_to_64(ids_offset + (capacity * 8));
-            let states_offset = align_to_64(type_ids_offset + (capacity * 2));
-            let weights_offset = align_to_64(states_offset + capacity);
-            let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
-            let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
-            let dirty_mask_offset = align_to_64(ext_offsets_offset + (capacity * 4));
+            let type_ids_offset =
+                align_to_64(align_to_64(ids_offset + (capacity * 8)) + GUARD_SIZE);
+            let states_offset =
+                align_to_64(align_to_64(type_ids_offset + (capacity * 2)) + GUARD_SIZE);
+            let weights_offset = align_to_64(align_to_64(states_offset + capacity) + GUARD_SIZE);
+            let timestamps_offset =
+                align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE);
+            let ext_offsets_offset =
+                align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
+            let dirty_mask_offset =
+                align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
 
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
@@ -319,21 +330,63 @@ impl MmapNodeTable {
     /// Calculates the total memory size required for a `MmapNodeTable` with the given capacity.
     pub fn calculate_mmap_size(capacity: usize) -> usize {
         let ids_offset = align_to_64(8);
-        let type_ids_offset = align_to_64(ids_offset + (capacity * 8));
-        let states_offset = align_to_64(type_ids_offset + (capacity * 2));
-        let weights_offset = align_to_64(states_offset + capacity);
-        let timestamps_offset = align_to_64(weights_offset + (capacity * 4));
-        let ext_offsets_offset = align_to_64(timestamps_offset + (capacity * 8));
-        let dirty_mask_offset = align_to_64(ext_offsets_offset + (capacity * 4));
+        let type_ids_offset = align_to_64(align_to_64(ids_offset + (capacity * 8)) + GUARD_SIZE);
+        let states_offset = align_to_64(align_to_64(type_ids_offset + (capacity * 2)) + GUARD_SIZE);
+        let weights_offset = align_to_64(align_to_64(states_offset + capacity) + GUARD_SIZE);
+        let timestamps_offset =
+            align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE);
+        let ext_offsets_offset =
+            align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
+        let dirty_mask_offset =
+            align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
         // Each u64 covers 64 nodes.
         let bitmask_words = capacity.div_ceil(64);
-        align_to_64(dirty_mask_offset + (bitmask_words * 8))
+        align_to_64(align_to_64(dirty_mask_offset + (bitmask_words * 8)) + GUARD_SIZE)
+    }
+
+    /// Returns a list of all guard segment base pointers for the node table.
+    pub fn get_guard_pointers(&self) -> Vec<*mut u64> {
+        let capacity = self.capacity;
+        let base_ptr = self.ptr.as_ptr();
+        let mut guards = Vec::new();
+        unsafe {
+            let ids_offset = align_to_64(8);
+            guards.push(base_ptr.add(align_to_64(ids_offset + (capacity * 8))) as *mut u64);
+
+            let type_ids_offset =
+                align_to_64(align_to_64(ids_offset + (capacity * 8)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(type_ids_offset + (capacity * 2))) as *mut u64);
+
+            let states_offset =
+                align_to_64(align_to_64(type_ids_offset + (capacity * 2)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(states_offset + capacity)) as *mut u64);
+
+            let weights_offset = align_to_64(align_to_64(states_offset + capacity) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(weights_offset + (capacity * 4))) as *mut u64);
+
+            let timestamps_offset =
+                align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(timestamps_offset + (capacity * 8))) as *mut u64);
+
+            let ext_offsets_offset =
+                align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(ext_offsets_offset + (capacity * 4))) as *mut u64);
+
+            let dirty_mask_offset =
+                align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
+            let bitmask_words = capacity.div_ceil(64);
+            guards.push(
+                base_ptr.add(align_to_64(dirty_mask_offset + (bitmask_words * 8))) as *mut u64,
+            );
+        }
+        guards
     }
 }
 
 /// A Data-Oriented Design (DOD) table for edges stored in memory-mapped files.
 ///
-/// Optimized for fast traversal and SIMD processing with 64-byte aligned array fields.
+/// Optimized for fast traversal and SIMD processing with 64-byte aligned array fields
+/// and canary guard protection.
 #[derive(Debug)]
 pub struct MmapEdgeTable {
     /// Pointer to the base of the edge table memory region.
@@ -361,14 +414,14 @@ impl MmapEdgeTable {
     /// * The memory layout must follow internal 64-byte alignment rules.
     /// * The first 8 bytes of `base_ptr` must contain the current edge count as a u64.
     pub unsafe fn new_from_ptr(base_ptr: *mut u8, capacity: usize) -> Self {
-        // SAFETY: Offsets are calculated to maintain 64-byte alignment for hardware acceleration.
-        // Caller ensures memory validity.
+        // SAFETY: Offsets are calculated to maintain 64-byte alignment and include guards.
         unsafe {
             let count = *(base_ptr as *mut u64) as usize;
             let src_offset = align_to_64(8);
-            let tgt_offset = align_to_64(src_offset + (capacity * 4));
-            let types_offset = align_to_64(tgt_offset + (capacity * 4));
-            let weights_offset = align_to_64(types_offset + (capacity * 2));
+            let tgt_offset = align_to_64(align_to_64(src_offset + (capacity * 4)) + GUARD_SIZE);
+            let types_offset = align_to_64(align_to_64(tgt_offset + (capacity * 4)) + GUARD_SIZE);
+            let weights_offset =
+                align_to_64(align_to_64(types_offset + (capacity * 2)) + GUARD_SIZE);
 
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
@@ -410,10 +463,32 @@ impl MmapEdgeTable {
     /// Calculates the total memory size required for a `MmapEdgeTable` with the given capacity.
     pub fn calculate_mmap_size(capacity: usize) -> usize {
         let src_offset = align_to_64(8);
-        let tgt_offset = align_to_64(src_offset + (capacity * 4));
-        let types_offset = align_to_64(tgt_offset + (capacity * 4));
-        let weights_offset = align_to_64(types_offset + (capacity * 2));
-        align_to_64(weights_offset + (capacity * 4))
+        let tgt_offset = align_to_64(align_to_64(src_offset + (capacity * 4)) + GUARD_SIZE);
+        let types_offset = align_to_64(align_to_64(tgt_offset + (capacity * 4)) + GUARD_SIZE);
+        let weights_offset = align_to_64(align_to_64(types_offset + (capacity * 2)) + GUARD_SIZE);
+        align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE)
+    }
+
+    /// Returns a list of all guard segment base pointers for the edge table.
+    pub fn get_guard_pointers(&self) -> Vec<*mut u64> {
+        let capacity = self.capacity;
+        let base_ptr = self.ptr.as_ptr();
+        let mut guards = Vec::new();
+        unsafe {
+            let src_offset = align_to_64(8);
+            guards.push(base_ptr.add(align_to_64(src_offset + (capacity * 4))) as *mut u64);
+
+            let tgt_offset = align_to_64(align_to_64(src_offset + (capacity * 4)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(tgt_offset + (capacity * 4))) as *mut u64);
+
+            let types_offset = align_to_64(align_to_64(tgt_offset + (capacity * 4)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(types_offset + (capacity * 2))) as *mut u64);
+
+            let weights_offset =
+                align_to_64(align_to_64(types_offset + (capacity * 2)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(weights_offset + (capacity * 4))) as *mut u64);
+        }
+        guards
     }
 }
 
@@ -474,13 +549,51 @@ impl GraphStore {
             (nodes, edges)
         };
 
-        Ok(Self {
+        let mut store = Self {
             nodes,
             edges,
             metadata,
             delta_log,
             _mmap: mmap,
-        })
+        };
+
+        if !file_existed {
+            store.initialize_guards();
+        }
+
+        Ok(store)
+    }
+
+    /// Writes the `CANARY_PATTERN` into all guard segments.
+    pub fn initialize_guards(&mut self) {
+        let mut guards = self.nodes.get_guard_pointers();
+        guards.extend(self.edges.get_guard_pointers());
+
+        for guard_ptr in guards {
+            unsafe {
+                // Fill the 64-byte guard with the 8-byte canary pattern
+                for i in 0..(GUARD_SIZE / 8) {
+                    guard_ptr.add(i).write(CANARY_PATTERN);
+                }
+            }
+        }
+    }
+
+    /// Verifies that all canary patterns in guard segments are still intact.
+    pub fn verify_canaries(&self) -> bool {
+        let mut guards = self.nodes.get_guard_pointers();
+        guards.extend(self.edges.get_guard_pointers());
+
+        for guard_ptr in guards {
+            unsafe {
+                for i in 0..(GUARD_SIZE / 8) {
+                    if *guard_ptr.add(i) != CANARY_PATTERN {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
 
     /// Adds a new node to the graph.
@@ -928,5 +1041,32 @@ mod tests {
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.meta", path));
         let _ = std::fs::remove_file(&delta_path);
+    }
+
+    #[test]
+    fn test_canary_guards() {
+        let path = "test_canary.bin";
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+
+        {
+            let store = GraphStore::new(path, 10, 10).unwrap();
+            // Should be valid initially
+            assert!(store.verify_canaries());
+
+            // Manually corrupt a canary
+            let guards = store.nodes.get_guard_pointers();
+            unsafe {
+                guards[0].write(0xBAD0000000000BAD);
+            }
+
+            // Should now fail verification
+            assert!(!store.verify_canaries());
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
     }
 }

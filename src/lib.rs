@@ -730,6 +730,60 @@ impl GraphStore {
         }
     }
 
+    /// Reclaims wasted memory in the metadata arena by compacting all active payloads.
+    ///
+    /// This operation moves all 'alive' bytes to the beginning of the arena and updates
+    /// all node extension offsets accordingly.
+    pub fn compact_metadata(&mut self) -> std::result::Result<(), String> {
+        let current_report = self.analyze_fragmentation();
+        if current_report.dead_bytes == 0 {
+            return Ok(());
+        }
+
+        // Create a workspace for the compacted data
+        let mut workspace = vec![0u8; self.metadata.mmap.len()];
+        let mut new_offset = 8usize;
+
+        // Initialize the new offset header in the workspace
+        workspace[0..8].copy_from_slice(&(8u64.to_ne_bytes()));
+
+        for i in 0..self.nodes.count {
+            unsafe {
+                let old_offset = *self.nodes.ext_offsets_ptr.add(i) as usize;
+                let len = *self.nodes.ext_lengths_ptr.add(i) as usize;
+
+                if old_offset > 0 && len > 0 {
+                    // Copy payload to the new location in workspace
+                    let src = &self.metadata.mmap[old_offset..old_offset + len];
+                    workspace[new_offset..new_offset + len].copy_from_slice(src);
+
+                    // Update node pointers to the new offset
+                    *self.nodes.ext_offsets_ptr.add(i) = new_offset as u32;
+
+                    new_offset += len;
+                }
+            }
+        }
+
+        // Write the final new_offset to the workspace header
+        workspace[0..8].copy_from_slice(&(new_offset as u64).to_ne_bytes());
+
+        // Zero out the entire metadata mmap before copying back (safety)
+        unsafe {
+            std::ptr::write_bytes(self.metadata.mmap.as_mut_ptr(), 0, self.metadata.mmap.len());
+            std::ptr::copy_nonoverlapping(
+                workspace.as_ptr(),
+                self.metadata.mmap.as_mut_ptr(),
+                self.metadata.mmap.len(),
+            );
+        }
+
+        // Update the metadata buffer state
+        self.metadata.current_offset = new_offset;
+
+        Ok(())
+    }
+
     /// Finds the node index and weight of the best node matching a target type ID.
     ///
     /// This implementation uses SIMD for 16-wide processing and falls back to scalar
@@ -1184,6 +1238,49 @@ mod tests {
 
             // Should now fail verification
             assert!(!store.verify_canaries());
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+    }
+
+    #[test]
+    fn test_compaction() {
+        let path = "test_compact.bin";
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+
+        {
+            let mut store = GraphStore::new(path, 10, 10).unwrap();
+            store.add_node(1, 1, 0.5);
+
+            // Create waste by overwriting metadata multiple times
+            for i in 0..5 {
+                store.set_node_metadata(0, &[i as u8; 100]).unwrap();
+            }
+
+            let report = store.analyze_fragmentation();
+            // Each write is 100 bytes. Total 5 writes = 500 bytes + 8 byte header = 508.
+            // Only the last 100 bytes are alive.
+            // Dead bytes: 400.
+            assert_eq!(report.alive_bytes, 100);
+            assert_eq!(report.dead_bytes, 400);
+            assert!(report.fragmentation_ratio > 0.7);
+
+            // Compact
+            store.compact_metadata().unwrap();
+
+            let report_after = store.analyze_fragmentation();
+            assert_eq!(report_after.alive_bytes, 100);
+            assert_eq!(report_after.dead_bytes, 0);
+            assert_eq!(report_after.fragmentation_ratio, 0.0);
+            assert_eq!(report_after.current_offset, 108);
+
+            // Verify data integrity
+            let data = store.get_node_metadata(0).unwrap();
+            assert_eq!(data, &[4u8; 100]);
         }
 
         let _ = std::fs::remove_file(path);

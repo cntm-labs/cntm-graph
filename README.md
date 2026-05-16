@@ -1,55 +1,37 @@
-<div align="center">
+# Continuum Graph
 
-# cntm-graph
-
-**Continuum: Where Symbolic Logic Meets Neural Performance**
+**The High-Performance Memory Kernel for AGI**
 
 [![CI](https://github.com/cntm-labs/cntm-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/cntm-labs/cntm-graph/actions/workflows/ci.yml)
-[![Security](https://github.com/cntm-labs/cntm-graph/actions/workflows/security.yml/badge.svg)](https://github.com/cntm-labs/cntm-graph/actions/workflows/security.yml)
+[![Performance](https://github.com/cntm-labs/cntm-graph/actions/workflows/performance.yml/badge.svg)](https://github.com/cntm-labs/cntm-graph/actions/workflows/performance.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-active-success)](./)
 
-![Rust LOD](https://img.shields.io/badge/Rust_LOD-0-dea584.svg) ![Mojo LOD](https://img.shields.io/badge/Mojo_LOD-0-CC0000.svg) ![Total LOD](https://img.shields.io/badge/Total_LOD-0-brightgreen.svg)
+Continuum Graph is a mission-critical, low-level graph engine designed to serve as the long-term memory layer for AGI systems. It leverages Rust, SIMD acceleration, and Zero-copy shared memory to provide sub-nanosecond traversal speeds.
 
-[![Rust](https://img.shields.io/badge/Rust-dea584?logo=rust&logoColor=white)](./) [![Mojo](https://img.shields.io/badge/Mojo-CC0000?logo=mojo&logoColor=white)](./) [![FlatBuffers](https://img.shields.io/badge/FlatBuffers-4285F4?logo=google&logoColor=white)](./) [![SIMD](https://img.shields.io/badge/SIMD-555555)](./) [![SHM](https://img.shields.io/badge/SHM-555555)](./) [![mmap](https://img.shields.io/badge/mmap-555555)](./)
+## ✨ Core Pillars
 
-</div>
+- 🚀 **Billion-Scale Performance:** Optimized Data-Oriented Design (DOD) supporting 1B+ nodes with massive SIMD throughput.
+- 🛡️ **Formal Safety:** Mathematically verified memory boundaries and mutations using the Lean 4 proof assistant.
+- 🕰️ **Temporal Awareness:** Real-time delta streaming to **isotime** for full chronological knowledge evolution.
+- 🎨 **Visual Intelligence:** A WebGPU-powered explorer with orthogonal (stepped lines) routing for complex reasoning visualization.
 
----
+## 🚀 Quick Start (Docker)
 
-[ English | [ภาษาไทย](./locales/README.th.md) | [日本語](./locales/README.ja.md) | [简体中文](./locales/README.zh.md) ]
-
-The Continuum Graph Engine (cntm-graph) is a high-performance, low-level graph engine designed specifically to serve as the memory and cognition layer for AGI. Built in Rust with a focus on zero-copy data traversal, it bridges the gap between formal symbolic reasoning and high-throughput neural processing.
-
-## ✨ Features
-
-- 🚀 **Zero-Copy AI-Memory Bridge** — Direct memory mapping (mmap) providing instant access to graph nodes from Mojo/C++ engines with zero latency.
-- 🏗️ **Data-Oriented Design (DOD)** — Optimized Structure of Arrays (SoA) layout for peak CPU cache efficiency and billion-scale node traversal.
-- ⚡ **AVX-512 SIMD Acceleration** — Explicit 64-byte memory alignment allowing vectorized processing of 16 nodes per instruction.
-- 🛡️ **Formalized Truth Verification** — Integrated Lean proof assistant logic to verify graph mutations, preventing AI hallucinations at the structural level.
-- 📊 **Temporal Evolution Engine** — Powered by Isotime integration, capturing the chronological evolution of knowledge with delta-based compression.
-
-## 🛠️ Quick Start
+The fastest way to deploy Continuum Graph is via Docker:
 
 ```bash
-# Clone the repository
+# Clone and launch
 git clone https://github.com/cntm-labs/cntm-graph.git
-cd cntm-graph
-
-# Build the engine
-cargo build --release
-
-# Run performance benchmarks
-cargo test --release
+docker-compose up -d
 ```
 
-## 🗺️ Navigation
+Access the Web Explorer at `http://localhost:5173`.
 
-- 🏗️ **[Architecture](ARCHITECTURE.md)** — Core design and components.
-- 📅 **[Roadmap](ROADMAP.md)** — Project timeline and milestones.
-- 🤝 **[Contributing](CONTRIBUTING.md)** — How to join and help.
-- 🌳 **[Project Structure](STRUCTURE.tree)** — Full file map.
+## 🗺️ Documentation
 
-## ⚖️ License
+- 📖 **[User Guide](USER_GUIDE.md)** — Getting started, configuration, and examples.
+- 🏗️ **[Architecture](ARCHITECTURE.md)** — Deep dive into the SoA memory layout and FFI bridge.
+- 🛡️ **[Security](SECURITY.md)** — Audit protocols and canary guarding details.
 
-[MIT](LICENSE)
+---
+[ English | [ภาษาไทย](./locales/README.th.md) | [日本語](./locales/README.ja.md) | [简体中文](./locales/README.zh.md) ]

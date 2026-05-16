@@ -229,6 +229,8 @@ pub struct MmapNodeTable {
     pub timestamps_ptr: *mut u64,
     /// Pointer to the array of extension offsets (u32).
     pub ext_offsets_ptr: *mut u32,
+    /// Pointer to the array of extension lengths (u32).
+    pub ext_lengths_ptr: *mut u32,
     /// Pointer to the dirty bitmask (u64 words, each covering 64 nodes).
     pub dirty_mask_ptr: *mut u64,
 }
@@ -256,8 +258,10 @@ impl MmapNodeTable {
                 align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE);
             let ext_offsets_offset =
                 align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
-            let dirty_mask_offset =
+            let ext_lengths_offset =
                 align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
+            let dirty_mask_offset =
+                align_to_64(align_to_64(ext_lengths_offset + (capacity * 4)) + GUARD_SIZE);
 
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
@@ -269,6 +273,7 @@ impl MmapNodeTable {
                 weights_ptr: base_ptr.add(weights_offset) as *mut f32,
                 timestamps_ptr: base_ptr.add(timestamps_offset) as *mut u64,
                 ext_offsets_ptr: base_ptr.add(ext_offsets_offset) as *mut u32,
+                ext_lengths_ptr: base_ptr.add(ext_lengths_offset) as *mut u32,
                 dirty_mask_ptr: base_ptr.add(dirty_mask_offset) as *mut u64,
             }
         }
@@ -318,6 +323,7 @@ impl MmapNodeTable {
             self.weights_ptr.add(idx).write(weight);
             self.timestamps_ptr.add(idx).write(0); // Default placeholder
             self.ext_offsets_ptr.add(idx).write(0);
+            self.ext_lengths_ptr.add(idx).write(0);
 
             self.count += 1;
             // Persist count to the beginning of the mmap region
@@ -337,8 +343,10 @@ impl MmapNodeTable {
             align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE);
         let ext_offsets_offset =
             align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
-        let dirty_mask_offset =
+        let ext_lengths_offset =
             align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
+        let dirty_mask_offset =
+            align_to_64(align_to_64(ext_lengths_offset + (capacity * 4)) + GUARD_SIZE);
         // Each u64 covers 64 nodes.
         let bitmask_words = capacity.div_ceil(64);
         align_to_64(align_to_64(dirty_mask_offset + (bitmask_words * 8)) + GUARD_SIZE)
@@ -372,8 +380,12 @@ impl MmapNodeTable {
                 align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
             guards.push(base_ptr.add(align_to_64(ext_offsets_offset + (capacity * 4))) as *mut u64);
 
-            let dirty_mask_offset =
+            let ext_lengths_offset =
                 align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(ext_lengths_offset + (capacity * 4))) as *mut u64);
+
+            let dirty_mask_offset =
+                align_to_64(align_to_64(ext_lengths_offset + (capacity * 4)) + GUARD_SIZE);
             let bitmask_words = capacity.div_ceil(64);
             guards.push(
                 base_ptr.add(align_to_64(dirty_mask_offset + (bitmask_words * 8))) as *mut u64,
@@ -509,6 +521,20 @@ pub struct GraphStore {
     _mmap: MmapMut,
 }
 
+/// Report containing memory fragmentation metrics for the metadata arena.
+pub struct FragmentationReport {
+    /// Total size of the allocated memory-mapped region.
+    pub total_arena_size: usize,
+    /// Current write offset in the buffer (including the 8-byte header).
+    pub current_offset: usize,
+    /// Sum of all active metadata payload lengths.
+    pub alive_bytes: usize,
+    /// Bytes that are no longer referenced by any active node (fragmented).
+    pub dead_bytes: usize,
+    /// Ratio of dead bytes to the total occupied space (excluding header).
+    pub fragmentation_ratio: f32,
+}
+
 impl GraphStore {
     /// Initializes a new `GraphStore` at the specified path with given capacities.
     ///
@@ -628,6 +654,10 @@ impl GraphStore {
                 .ext_offsets_ptr
                 .add(node_idx)
                 .write(offset as u32);
+            self.nodes
+                .ext_lengths_ptr
+                .add(node_idx)
+                .write(payload.len() as u32);
         }
 
         self.nodes.mark_dirty(node_idx);
@@ -644,23 +674,114 @@ impl GraphStore {
             return None;
         }
 
-        // SAFETY: `ext_offsets_ptr` is valid and `node_idx` is within bounds.
-        let offset = unsafe { *self.nodes.ext_offsets_ptr.add(node_idx) } as usize;
+        // SAFETY: `ext_offsets_ptr` and `ext_lengths_ptr` are valid and `node_idx` is within bounds.
+        let (offset, len) = unsafe {
+            (
+                *self.nodes.ext_offsets_ptr.add(node_idx) as usize,
+                *self.nodes.ext_lengths_ptr.add(node_idx) as usize,
+            )
+        };
 
-        if offset == 0 {
+        if offset == 0 || len == 0 {
             return None;
         }
 
-        // FlatBuffers follow the rule that the first 4 bytes at the root
-        // point to the actual table data. However, the buffer size itself
-        // is needed for safe slicing. For this prototype, we look at the
-        // `current_offset` of the metadata buffer to find the boundary.
-        // A more robust way would be to store length in the DOD table.
-        if offset >= self.metadata.current_offset {
+        if offset + len > self.metadata.mmap.len() {
             return None;
         }
 
-        Some(&self.metadata.mmap[offset..self.metadata.current_offset])
+        Some(&self.metadata.mmap[offset..offset + len])
+    }
+
+    /// Performs an analysis of the metadata arena to determine fragmentation levels.
+    pub fn analyze_fragmentation(&self) -> FragmentationReport {
+        let total_arena_size = self.metadata.mmap.len();
+        let current_offset = self.metadata.current_offset;
+
+        let mut alive_bytes = 0;
+        for i in 0..self.nodes.count {
+            unsafe {
+                let offset = *self.nodes.ext_offsets_ptr.add(i);
+                if offset > 0 {
+                    alive_bytes += *self.nodes.ext_lengths_ptr.add(i) as usize;
+                }
+            }
+        }
+
+        // Subtracting 8 bytes for the header that tracks the current offset
+        let dead_bytes = if current_offset > 8 {
+            current_offset - 8 - alive_bytes
+        } else {
+            0
+        };
+
+        let fragmentation_ratio = if current_offset > 8 {
+            dead_bytes as f32 / (current_offset - 8) as f32
+        } else {
+            0.0
+        };
+
+        FragmentationReport {
+            total_arena_size,
+            current_offset,
+            alive_bytes,
+            dead_bytes,
+            fragmentation_ratio,
+        }
+    }
+
+    /// Reclaims wasted memory in the metadata arena by compacting all active payloads.
+    ///
+    /// This operation moves all 'alive' bytes to the beginning of the arena and updates
+    /// all node extension offsets accordingly.
+    pub fn compact_metadata(&mut self) -> std::result::Result<(), String> {
+        let current_report = self.analyze_fragmentation();
+        if current_report.dead_bytes == 0 {
+            return Ok(());
+        }
+
+        // Create a workspace for the compacted data
+        let mut workspace = vec![0u8; self.metadata.mmap.len()];
+        let mut new_offset = 8usize;
+
+        // Initialize the new offset header in the workspace
+        workspace[0..8].copy_from_slice(&(8u64.to_ne_bytes()));
+
+        for i in 0..self.nodes.count {
+            unsafe {
+                let old_offset = *self.nodes.ext_offsets_ptr.add(i) as usize;
+                let len = *self.nodes.ext_lengths_ptr.add(i) as usize;
+
+                if old_offset > 0 && len > 0 {
+                    // Copy payload to the new location in workspace
+                    let src = &self.metadata.mmap[old_offset..old_offset + len];
+                    workspace[new_offset..new_offset + len].copy_from_slice(src);
+
+                    // Update node pointers to the new offset
+                    *self.nodes.ext_offsets_ptr.add(i) = new_offset as u32;
+
+                    new_offset += len;
+                }
+            }
+        }
+
+        // Write the final new_offset to the workspace header
+        workspace[0..8].copy_from_slice(&(new_offset as u64).to_ne_bytes());
+
+        // Zero out the entire metadata mmap before copying back (safety)
+        unsafe {
+            std::ptr::write_bytes(self.metadata.mmap.as_mut_ptr(), 0, self.metadata.mmap.len());
+            std::ptr::copy_nonoverlapping(
+                workspace.as_ptr(),
+                self.metadata.mmap.as_mut_ptr(),
+                self.metadata.mmap.len(),
+            );
+        }
+
+        // Update the metadata buffer state
+        self.metadata.current_offset = new_offset;
+
+        Ok(())
     }
 
     /// Finds the node index and weight of the best node matching a target type ID.
@@ -1044,6 +1165,60 @@ mod tests {
     }
 
     #[test]
+    fn test_fragmentation_analysis() {
+        let path = "test_frag.bin";
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+
+        {
+            let mut store = GraphStore::new(path, 10, 10).unwrap();
+            store.add_node(1, 1, 0.5);
+            store.add_node(2, 1, 0.6);
+
+            // Initial report (no metadata)
+            let report = store.analyze_fragmentation();
+            assert_eq!(report.current_offset, 8);
+            assert_eq!(report.alive_bytes, 0);
+            assert_eq!(report.dead_bytes, 0);
+            assert_eq!(report.fragmentation_ratio, 0.0);
+
+            // Set metadata for node 0
+            store.set_node_metadata(0, &[1, 2, 3, 4]).unwrap();
+            let report = store.analyze_fragmentation();
+            assert_eq!(report.current_offset, 12); // 8 + 4
+            assert_eq!(report.alive_bytes, 4);
+            assert_eq!(report.dead_bytes, 0);
+            assert_eq!(report.fragmentation_ratio, 0.0);
+
+            // Set metadata for node 1
+            store.set_node_metadata(1, &[5, 6, 7]).unwrap();
+            let report = store.analyze_fragmentation();
+            assert_eq!(report.current_offset, 15); // 12 + 3
+            assert_eq!(report.alive_bytes, 7);
+            assert_eq!(report.dead_bytes, 0);
+            assert_eq!(report.fragmentation_ratio, 0.0);
+
+            // Overwrite node 0 metadata (simulating fragmentation)
+            // Note: Current implementation of set_node_metadata ALWAYS appends.
+            store.set_node_metadata(0, &[8, 9]).unwrap();
+            let report = store.analyze_fragmentation();
+            // current_offset: 15 + 2 = 17
+            // alive_bytes: node 0 len (2) + node 1 len (3) = 5
+            // dead_bytes: (17 - 8) - 5 = 9 - 5 = 4
+            // fragmentation_ratio: 4 / 9 = 0.444...
+            assert_eq!(report.current_offset, 17);
+            assert_eq!(report.alive_bytes, 5);
+            assert_eq!(report.dead_bytes, 4);
+            assert!(report.fragmentation_ratio > 0.44 && report.fragmentation_ratio < 0.45);
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+    }
+
+    #[test]
     fn test_canary_guards() {
         let path = "test_canary.bin";
         let _ = std::fs::remove_file(path);
@@ -1063,6 +1238,49 @@ mod tests {
 
             // Should now fail verification
             assert!(!store.verify_canaries());
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+    }
+
+    #[test]
+    fn test_compaction() {
+        let path = "test_compact.bin";
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+
+        {
+            let mut store = GraphStore::new(path, 10, 10).unwrap();
+            store.add_node(1, 1, 0.5);
+
+            // Create waste by overwriting metadata multiple times
+            for i in 0..5 {
+                store.set_node_metadata(0, &[i as u8; 100]).unwrap();
+            }
+
+            let report = store.analyze_fragmentation();
+            // Each write is 100 bytes. Total 5 writes = 500 bytes + 8 byte header = 508.
+            // Only the last 100 bytes are alive.
+            // Dead bytes: 400.
+            assert_eq!(report.alive_bytes, 100);
+            assert_eq!(report.dead_bytes, 400);
+            assert!(report.fragmentation_ratio > 0.7);
+
+            // Compact
+            store.compact_metadata().unwrap();
+
+            let report_after = store.analyze_fragmentation();
+            assert_eq!(report_after.alive_bytes, 100);
+            assert_eq!(report_after.dead_bytes, 0);
+            assert_eq!(report_after.fragmentation_ratio, 0.0);
+            assert_eq!(report_after.current_offset, 108);
+
+            // Verify data integrity
+            let data = store.get_node_metadata(0).unwrap();
+            assert_eq!(data, &[4u8; 100]);
         }
 
         let _ = std::fs::remove_file(path);

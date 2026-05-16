@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  continuum-graph:
+    build: .
+    container_name: continuum-graph-core
+    # Critical for low-latency shared memory
+    shm_size: '2gb'
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - RUST_LOG=info
+      - CONTINUUM_SHM_PATH=/dev/shm/graph.bin
+    restart: unless-stopped

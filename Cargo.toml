@@ -9,6 +9,13 @@ flatbuffers = "25.1.24"
 aligned-vec = "0.5"
 rand = { version = "0.8", features = ["small_rng"] }
 
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+panic = 'abort'
+strip = true
+
 [dev-dependencies]
 criterion = "0.5"
 

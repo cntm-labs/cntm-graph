@@ -229,6 +229,8 @@ pub struct MmapNodeTable {
     pub timestamps_ptr: *mut u64,
     /// Pointer to the array of extension offsets (u32).
     pub ext_offsets_ptr: *mut u32,
+    /// Pointer to the array of extension lengths (u32).
+    pub ext_lengths_ptr: *mut u32,
     /// Pointer to the dirty bitmask (u64 words, each covering 64 nodes).
     pub dirty_mask_ptr: *mut u64,
 }
@@ -256,8 +258,10 @@ impl MmapNodeTable {
                 align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE);
             let ext_offsets_offset =
                 align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
-            let dirty_mask_offset =
+            let ext_lengths_offset =
                 align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
+            let dirty_mask_offset =
+                align_to_64(align_to_64(ext_lengths_offset + (capacity * 4)) + GUARD_SIZE);
 
             Self {
                 ptr: NonNull::new_unchecked(base_ptr),
@@ -269,6 +273,7 @@ impl MmapNodeTable {
                 weights_ptr: base_ptr.add(weights_offset) as *mut f32,
                 timestamps_ptr: base_ptr.add(timestamps_offset) as *mut u64,
                 ext_offsets_ptr: base_ptr.add(ext_offsets_offset) as *mut u32,
+                ext_lengths_ptr: base_ptr.add(ext_lengths_offset) as *mut u32,
                 dirty_mask_ptr: base_ptr.add(dirty_mask_offset) as *mut u64,
             }
         }
@@ -318,6 +323,7 @@ impl MmapNodeTable {
             self.weights_ptr.add(idx).write(weight);
             self.timestamps_ptr.add(idx).write(0); // Default placeholder
             self.ext_offsets_ptr.add(idx).write(0);
+            self.ext_lengths_ptr.add(idx).write(0);
 
             self.count += 1;
             // Persist count to the beginning of the mmap region
@@ -337,8 +343,10 @@ impl MmapNodeTable {
             align_to_64(align_to_64(weights_offset + (capacity * 4)) + GUARD_SIZE);
         let ext_offsets_offset =
             align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
-        let dirty_mask_offset =
+        let ext_lengths_offset =
             align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
+        let dirty_mask_offset =
+            align_to_64(align_to_64(ext_lengths_offset + (capacity * 4)) + GUARD_SIZE);
         // Each u64 covers 64 nodes.
         let bitmask_words = capacity.div_ceil(64);
         align_to_64(align_to_64(dirty_mask_offset + (bitmask_words * 8)) + GUARD_SIZE)
@@ -372,8 +380,12 @@ impl MmapNodeTable {
                 align_to_64(align_to_64(timestamps_offset + (capacity * 8)) + GUARD_SIZE);
             guards.push(base_ptr.add(align_to_64(ext_offsets_offset + (capacity * 4))) as *mut u64);
 
-            let dirty_mask_offset =
+            let ext_lengths_offset =
                 align_to_64(align_to_64(ext_offsets_offset + (capacity * 4)) + GUARD_SIZE);
+            guards.push(base_ptr.add(align_to_64(ext_lengths_offset + (capacity * 4))) as *mut u64);
+
+            let dirty_mask_offset =
+                align_to_64(align_to_64(ext_lengths_offset + (capacity * 4)) + GUARD_SIZE);
             let bitmask_words = capacity.div_ceil(64);
             guards.push(
                 base_ptr.add(align_to_64(dirty_mask_offset + (bitmask_words * 8))) as *mut u64,
@@ -628,6 +640,10 @@ impl GraphStore {
                 .ext_offsets_ptr
                 .add(node_idx)
                 .write(offset as u32);
+            self.nodes
+                .ext_lengths_ptr
+                .add(node_idx)
+                .write(payload.len() as u32);
         }
 
         self.nodes.mark_dirty(node_idx);
@@ -644,23 +660,23 @@ impl GraphStore {
             return None;
         }
 
-        // SAFETY: `ext_offsets_ptr` is valid and `node_idx` is within bounds.
-        let offset = unsafe { *self.nodes.ext_offsets_ptr.add(node_idx) } as usize;
+        // SAFETY: `ext_offsets_ptr` and `ext_lengths_ptr` are valid and `node_idx` is within bounds.
+        let (offset, len) = unsafe {
+            (
+                *self.nodes.ext_offsets_ptr.add(node_idx) as usize,
+                *self.nodes.ext_lengths_ptr.add(node_idx) as usize,
+            )
+        };
 
-        if offset == 0 {
+        if offset == 0 || len == 0 {
             return None;
         }
 
-        // FlatBuffers follow the rule that the first 4 bytes at the root
-        // point to the actual table data. However, the buffer size itself
-        // is needed for safe slicing. For this prototype, we look at the
-        // `current_offset` of the metadata buffer to find the boundary.
-        // A more robust way would be to store length in the DOD table.
-        if offset >= self.metadata.current_offset {
+        if offset + len > self.metadata.mmap.len() {
             return None;
         }
 
-        Some(&self.metadata.mmap[offset..self.metadata.current_offset])
+        Some(&self.metadata.mmap[offset..offset + len])
     }
 
     /// Finds the node index and weight of the best node matching a target type ID.

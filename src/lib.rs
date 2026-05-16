@@ -521,6 +521,20 @@ pub struct GraphStore {
     _mmap: MmapMut,
 }
 
+/// Report containing memory fragmentation metrics for the metadata arena.
+pub struct FragmentationReport {
+    /// Total size of the allocated memory-mapped region.
+    pub total_arena_size: usize,
+    /// Current write offset in the buffer (including the 8-byte header).
+    pub current_offset: usize,
+    /// Sum of all active metadata payload lengths.
+    pub alive_bytes: usize,
+    /// Bytes that are no longer referenced by any active node (fragmented).
+    pub dead_bytes: usize,
+    /// Ratio of dead bytes to the total occupied space (excluding header).
+    pub fragmentation_ratio: f32,
+}
+
 impl GraphStore {
     /// Initializes a new `GraphStore` at the specified path with given capacities.
     ///
@@ -677,6 +691,43 @@ impl GraphStore {
         }
 
         Some(&self.metadata.mmap[offset..offset + len])
+    }
+
+    /// Performs an analysis of the metadata arena to determine fragmentation levels.
+    pub fn analyze_fragmentation(&self) -> FragmentationReport {
+        let total_arena_size = self.metadata.mmap.len();
+        let current_offset = self.metadata.current_offset;
+
+        let mut alive_bytes = 0;
+        for i in 0..self.nodes.count {
+            unsafe {
+                let offset = *self.nodes.ext_offsets_ptr.add(i);
+                if offset > 0 {
+                    alive_bytes += *self.nodes.ext_lengths_ptr.add(i) as usize;
+                }
+            }
+        }
+
+        // Subtracting 8 bytes for the header that tracks the current offset
+        let dead_bytes = if current_offset > 8 {
+            current_offset - 8 - alive_bytes
+        } else {
+            0
+        };
+
+        let fragmentation_ratio = if current_offset > 8 {
+            dead_bytes as f32 / (current_offset - 8) as f32
+        } else {
+            0.0
+        };
+
+        FragmentationReport {
+            total_arena_size,
+            current_offset,
+            alive_bytes,
+            dead_bytes,
+            fragmentation_ratio,
+        }
     }
 
     /// Finds the node index and weight of the best node matching a target type ID.
@@ -1057,6 +1108,60 @@ mod tests {
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.meta", path));
         let _ = std::fs::remove_file(&delta_path);
+    }
+
+    #[test]
+    fn test_fragmentation_analysis() {
+        let path = "test_frag.bin";
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
+
+        {
+            let mut store = GraphStore::new(path, 10, 10).unwrap();
+            store.add_node(1, 1, 0.5);
+            store.add_node(2, 1, 0.6);
+
+            // Initial report (no metadata)
+            let report = store.analyze_fragmentation();
+            assert_eq!(report.current_offset, 8);
+            assert_eq!(report.alive_bytes, 0);
+            assert_eq!(report.dead_bytes, 0);
+            assert_eq!(report.fragmentation_ratio, 0.0);
+
+            // Set metadata for node 0
+            store.set_node_metadata(0, &[1, 2, 3, 4]).unwrap();
+            let report = store.analyze_fragmentation();
+            assert_eq!(report.current_offset, 12); // 8 + 4
+            assert_eq!(report.alive_bytes, 4);
+            assert_eq!(report.dead_bytes, 0);
+            assert_eq!(report.fragmentation_ratio, 0.0);
+
+            // Set metadata for node 1
+            store.set_node_metadata(1, &[5, 6, 7]).unwrap();
+            let report = store.analyze_fragmentation();
+            assert_eq!(report.current_offset, 15); // 12 + 3
+            assert_eq!(report.alive_bytes, 7);
+            assert_eq!(report.dead_bytes, 0);
+            assert_eq!(report.fragmentation_ratio, 0.0);
+
+            // Overwrite node 0 metadata (simulating fragmentation)
+            // Note: Current implementation of set_node_metadata ALWAYS appends.
+            store.set_node_metadata(0, &[8, 9]).unwrap();
+            let report = store.analyze_fragmentation();
+            // current_offset: 15 + 2 = 17
+            // alive_bytes: node 0 len (2) + node 1 len (3) = 5
+            // dead_bytes: (17 - 8) - 5 = 9 - 5 = 4
+            // fragmentation_ratio: 4 / 9 = 0.444...
+            assert_eq!(report.current_offset, 17);
+            assert_eq!(report.alive_bytes, 5);
+            assert_eq!(report.dead_bytes, 4);
+            assert!(report.fragmentation_ratio > 0.44 && report.fragmentation_ratio < 0.45);
+        }
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.meta", path));
+        let _ = std::fs::remove_file(format!("{}.delta", path));
     }
 
     #[test]
